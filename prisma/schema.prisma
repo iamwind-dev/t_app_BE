@@ -1,0 +1,274 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+enum ReactionType {
+  LIKE
+}
+
+enum ConversationType {
+  DIRECT
+}
+
+enum MessageType {
+  TEXT
+}
+
+enum NotificationType {
+  LIKE
+  REPLY
+  FOLLOW
+  MESSAGE
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique @db.VarChar(255)
+  username       String    @unique @db.VarChar(30)
+  passwordHash   String    @db.VarChar(255)
+  displayName    String    @db.VarChar(80)
+  bio            String?   @db.VarChar(160)
+  avatarUrl      String?   @db.VarChar(2048)
+  status         String    @default("active") @db.VarChar(20)
+  followerCount  Int       @default(0)
+  followingCount Int       @default(0)
+  postCount      Int       @default(0)
+  deletedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  posts               Post[]
+  replies             Reply[]
+  postReactions       PostReaction[]
+  replyReactions      ReplyReaction[]
+  following           Follow[]             @relation("UserFollowing")
+  followers           Follow[]             @relation("UserFollowers")
+  conversationMembers ConversationMember[]
+  messages            Message[]
+  notifications       Notification[]       @relation("NotificationRecipient")
+  actedNotifications  Notification[]       @relation("NotificationActor")
+  deviceTokens        DeviceToken[]
+
+  @@index([username])
+  @@index([status, deletedAt])
+  @@index([createdAt])
+}
+
+model Post {
+  id               String           @id @default(uuid()) @db.Uuid
+  authorId         String           @db.Uuid
+  content          String?          @db.VarChar(500)
+  mediaUrls        String[]         @default([])
+  likeCount        Int              @default(0)
+  replyCount       Int              @default(0)
+  moderationStatus ModerationStatus @default(APPROVED)
+  moderationScore  Float?
+  moderationReason String?          @db.VarChar(500)
+  deletedAt        DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  author        User           @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  replies       Reply[]
+  reactions     PostReaction[]
+  notifications Notification[]
+
+  @@index([authorId, createdAt, id])
+  @@index([createdAt, id])
+  @@index([deletedAt])
+  @@index([moderationStatus, createdAt])
+}
+
+model Reply {
+  id               String           @id @default(uuid()) @db.Uuid
+  postId           String           @db.Uuid
+  parentReplyId    String?          @db.Uuid
+  authorId         String           @db.Uuid
+  content          String?          @db.VarChar(500)
+  mediaUrls        String[]         @default([])
+  likeCount        Int              @default(0)
+  childReplyCount  Int              @default(0)
+  moderationStatus ModerationStatus @default(PENDING)
+  moderationScore  Float?
+  moderationReason String?          @db.VarChar(500)
+  deletedAt        DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  post          Post            @relation(fields: [postId], references: [id], onDelete: Restrict)
+  parentReply   Reply?          @relation("ReplyChildren", fields: [parentReplyId], references: [id], onDelete: SetNull)
+  childReplies  Reply[]         @relation("ReplyChildren")
+  author        User            @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  reactions     ReplyReaction[]
+  notifications Notification[]
+
+  @@index([postId, parentReplyId, createdAt, id])
+  @@index([parentReplyId, createdAt, id])
+  @@index([authorId, createdAt])
+  @@index([deletedAt])
+  @@index([moderationStatus, createdAt])
+}
+
+model PostReaction {
+  id        String       @id @default(uuid()) @db.Uuid
+  postId    String       @db.Uuid
+  userId    String       @db.Uuid
+  type      ReactionType @default(LIKE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId, type])
+  @@index([userId, createdAt])
+  @@index([postId, createdAt])
+}
+
+model ReplyReaction {
+  id        String       @id @default(uuid()) @db.Uuid
+  replyId   String       @db.Uuid
+  userId    String       @db.Uuid
+  type      ReactionType @default(LIKE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  reply Reply @relation(fields: [replyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([replyId, userId, type])
+  @@index([userId, createdAt])
+  @@index([replyId, createdAt])
+}
+
+model Follow {
+  id          String    @id @default(uuid()) @db.Uuid
+  followerId  String    @db.Uuid
+  followingId String    @db.Uuid
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  follower  User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId, deletedAt, createdAt])
+  @@index([followingId, deletedAt, createdAt])
+}
+
+model Conversation {
+  id            String           @id @default(uuid()) @db.Uuid
+  type          ConversationType @default(DIRECT)
+  directKey     String?          @unique @db.VarChar(80)
+  lastMessageId String?          @db.Uuid
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@index([type, updatedAt])
+  @@index([updatedAt])
+}
+
+model ConversationMember {
+  id                String    @id @default(uuid()) @db.Uuid
+  conversationId    String    @db.Uuid
+  userId            String    @db.Uuid
+  lastSeenMessageId String?   @db.Uuid
+  lastSeenAt        DateTime?
+  joinedAt          DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenMessage Message?     @relation("MemberLastSeenMessage", fields: [lastSeenMessageId], references: [id], onDelete: SetNull)
+
+  @@unique([conversationId, userId])
+  @@index([userId, updatedAt])
+  @@index([conversationId])
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  conversationId String      @db.Uuid
+  senderId       String      @db.Uuid
+  type           MessageType @default(TEXT)
+  text           String?     @db.VarChar(2000)
+  content        String      @default("") @db.VarChar(2000)
+  mediaUrl       String?     @db.VarChar(2048)
+  deletedAt      DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  conversation  Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender        User                 @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  seenByMembers ConversationMember[] @relation("MemberLastSeenMessage")
+  notifications Notification[]
+
+  @@index([conversationId, createdAt, id])
+  @@index([senderId, createdAt])
+  @@index([deletedAt])
+}
+
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  type        NotificationType
+  recipientId String           @db.Uuid
+  actorId     String?          @db.Uuid
+  postId      String?          @db.Uuid
+  replyId     String?          @db.Uuid
+  messageId   String?          @db.Uuid
+  targetType  String?          @db.VarChar(50)
+  targetId    String?          @db.Uuid
+  sourceType  String?          @db.VarChar(50)
+  sourceId    String?          @db.Uuid
+  message     String           @db.VarChar(255)
+  metadata    Json?
+  readAt      DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  recipient   User     @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  post        Post?    @relation(fields: [postId], references: [id], onDelete: SetNull)
+  reply       Reply?   @relation(fields: [replyId], references: [id], onDelete: SetNull)
+  chatMessage Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([recipientId, type, sourceType, sourceId])
+  @@index([recipientId, readAt, createdAt, id])
+  @@index([recipientId, createdAt, id])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+}
+
+model DeviceToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  token      String    @unique @db.VarChar(4096)
+  platform   String    @db.VarChar(20)
+  deviceId   String?   @db.VarChar(255)
+  appVersion String?   @db.VarChar(50)
+  lastUsedAt DateTime  @default(now())
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([lastUsedAt])
+}

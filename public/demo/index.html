@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Threads Backend Demo</title>
+    <link rel="stylesheet" href="/demo-assets/styles.css" />
+    <script src="/socket.io-client/socket.io.min.js"></script>
+    <script src="/demo-assets/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">T</span>
+          <div>
+            <h1>Backend Demo</h1>
+            <p>Local API console</p>
+          </div>
+        </div>
+        <nav class="nav" aria-label="Demo sections">
+          <button class="nav-item is-active" type="button" data-section-target="health">Health</button>
+          <button class="nav-item" type="button" data-section-target="auth">Auth</button>
+          <button class="nav-item" type="button" data-section-target="users">Users</button>
+          <button class="nav-item" type="button" data-section-target="posts">Posts</button>
+          <button class="nav-item" type="button" data-section-target="reactions">Reactions</button>
+          <button class="nav-item" type="button" data-section-target="uploads">Uploads</button>
+          <button class="nav-item" type="button" data-section-target="notifications">Notifications</button>
+          <button class="nav-item" type="button" data-section-target="chat">Chat</button>
+        </nav>
+        <section class="token-panel" aria-label="Authentication token">
+          <label for="tokenInput">Access token</label>
+          <textarea id="tokenInput" rows="5" spellcheck="false"></textarea>
+          <div class="button-row">
+            <button type="button" class="secondary" data-action="save-token">Save</button>
+            <button type="button" class="ghost" data-action="clear-token">Clear</button>
+          </div>
+          <p id="tokenStatus" class="status-text">No token stored.</p>
+        </section>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">NestJS + Prisma + PostgreSQL</p>
+            <h2 id="activeTitle">Health</h2>
+          </div>
+          <a class="docs-link" href="/docs" target="_blank" rel="noreferrer">Swagger</a>
+        </header>
+
+        <section class="section is-active" id="section-health" data-section="health">
+          <div class="section-grid">
+            <article class="panel">
+              <h3>Health Check</h3>
+              <p class="hint">Verify that the backend responds.</p>
+              <button type="button" data-action="health">GET /health</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="section-auth" data-section="auth">
+          <div class="section-grid">
+            <form class="panel" data-action="register">
+              <h3>Register</h3>
+              <label>Email <input name="email" type="email" value="demo@example.com" required /></label>
+              <label>Username <input name="username" value="demo_user" required /></label>
+              <label>Password <input name="password" type="password" value="Password123" required /></label>
+              <label>Display name <input name="displayName" value="Demo User" /></label>
+              <button type="submit">POST /auth/register</button>
+            </form>
+            <form class="panel" data-action="login">
+              <h3>Login</h3>
+              <label>Email or username <input name="identifier" value="demo_user" required /></label>
+              <label>Password <input name="password" type="password" value="Password123" required /></label>
+              <button type="submit">POST /auth/login</button>
+            </form>
+            <article class="panel">
+              <h3>Current User</h3>
+              <button type="button" data-action="me">GET /auth/me</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="section-users" data-section="users">
+          <div class="section-grid">
+            <form class="panel" data-action="get-user">
+              <h3>User By ID</h3>
+              <label>User ID <input name="id" data-fill="userId" placeholder="UUID" required /></label>
+              <button type="submit">GET /users/:id</button>
+            </form>
+            <form class="panel" data-action="get-user-by-username">
+              <h3>User By Username</h3>
+              <label>Username <input name="username" data-fill="username" placeholder="demo_user" required /></label>
+              <button type="submit">GET /users/username/:username</button>
+            </form>
+            <form class="panel" data-action="update-profile">
+              <h3>Update Profile</h3>
+              <label>Username <input name="username" placeholder="new_username" /></label>
+              <label>Display name <input name="displayName" placeholder="Display name" /></label>
+              <label>Bio <textarea name="bio" rows="3" placeholder="Short bio"></textarea></label>
+              <label>Avatar URL <input name="avatarUrl" placeholder="http://localhost:3000/uploads/..." /></label>
+              <button type="submit">PATCH /users/me</button>
+            </form>
+            <form class="panel" data-action="user-posts">
+              <h3>User Posts</h3>
+              <label>User ID <input name="id" data-fill="userId" placeholder="UUID" required /></label>
+              <label>Limit <input name="limit" type="number" min="1" max="50" value="20" /></label>
+              <label>Cursor <input name="cursor" placeholder="optional UUID" /></label>
+              <button type="submit">GET /users/:id/posts</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="section" id="section-posts" data-section="posts">
+          <div class="section-grid">
+            <form class="panel" data-action="create-post">
+              <h3>Create Post</h3>
+              <label>Content <textarea name="content" rows="4">Hello from the demo web.</textarea></label>
+              <label>Media URLs <input name="mediaUrls" placeholder="comma-separated URLs" /></label>
+              <button type="submit">POST /posts</button>
+            </form>
+            <form class="panel" data-action="feed">
+              <h3>Feed</h3>
+              <label>Limit <input name="limit" type="number" min="1" max="50" value="20" /></label>
+              <label>Cursor <input name="cursor" placeholder="optional UUID" /></label>
+              <button type="submit">GET /posts/feed</button>
+            </form>
+            <form class="panel" data-action="get-post">
+              <h3>Post Detail</h3>
+              <label>Post ID <input name="id" data-fill="postId" placeholder="UUID" required /></label>
+              <button type="submit">GET /posts/:id</button>
+            </form>
+            <form class="panel" data-action="update-post">
+              <h3>Update Post</h3>
+              <label>Post ID <input name="id" data-fill="postId" placeholder="UUID" required /></label>
+              <label>Content <textarea name="content" rows="3" placeholder="Updated content"></textarea></label>
+              <label>Media URLs <input name="mediaUrls" placeholder="comma-separated URLs" /></label>
+              <button type="submit">PATCH /posts/:id</button>
+            </form>
+            <form class="panel danger-zone" data-action="delete-post">
+              <h3>Soft Delete Post</h3>
+              <label>Post ID <input name="id" data-fill="postId" placeholder="UUID" required /></label>
+              <button type="submit">DELETE /posts/:id</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="section" id="section-reactions" data-section="reactions">
+          <div class="section-grid">
+            <form class="panel" data-action="like-post">
+              <h3>Like Post</h3>
+              <label>Post ID <input name="postId" data-fill="postId" placeholder="UUID" required /></label>
+              <div class="button-row">
+                <button type="submit">POST like</button>
+                <button type="button" class="secondary" data-action="unlike-post">DELETE like</button>
+              </div>
+            </form>
+            <form class="panel" data-action="like-reply">
+              <h3>Like Reply</h3>
+              <label>Reply ID <input name="replyId" placeholder="UUID" required /></label>
+              <div class="button-row">
+                <button type="submit">POST like</button>
+                <button type="button" class="secondary" data-action="unlike-reply">DELETE like</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="section" id="section-uploads" data-section="uploads">
+          <div class="section-grid">
+            <form class="panel" data-action="upload-image">
+              <h3>Upload Image</h3>
+              <label>Usage
+                <select name="type">
+                  <option value="post">post</option>
+                  <option value="reply">reply</option>
+                  <option value="profile_avatar">profile_avatar</option>
+                </select>
+              </label>
+              <label>Image <input name="file" type="file" accept="image/jpeg,image/png,image/webp" required /></label>
+              <button type="submit">POST /uploads/image</button>
+              <p class="hint">Returned URL can be pasted into post media URLs or avatar URL.</p>
+            </form>
+          </div>
+        </section>
+
+        <section class="section" id="section-notifications" data-section="notifications">
+          <div class="section-grid">
+            <form class="panel" data-action="notifications">
+              <h3>List Notifications</h3>
+              <label>Limit <input name="limit" type="number" min="1" max="50" value="20" /></label>
+              <label>Cursor <input name="cursor" placeholder="optional UUID" /></label>
+              <label class="inline-check"><input name="unreadOnly" type="checkbox" /> Unread only</label>
+              <button type="submit">GET /notifications</button>
+            </form>
+            <form class="panel" data-action="mark-notification-read">
+              <h3>Mark Read</h3>
+              <label>Notification ID <input name="id" placeholder="UUID" required /></label>
+              <button type="submit">PATCH /notifications/:id/read</button>
+            </form>
+            <article class="panel">
+              <h3>Mark All Read</h3>
+              <button type="button" data-action="mark-all-notifications-read">PATCH /notifications/read-all</button>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" id="section-chat" data-section="chat">
+          <div class="section-grid">
+            <form class="panel" data-action="direct-conversation">
+              <h3>Direct Conversation</h3>
+              <label>Other user ID <input name="userId" placeholder="UUID" required /></label>
+              <button type="submit">POST /conversations/direct/:userId</button>
+            </form>
+            <form class="panel" data-action="conversations">
+              <h3>List Conversations</h3>
+              <label>Limit <input name="limit" type="number" min="1" max="50" value="20" /></label>
+              <label>Cursor <input name="cursor" placeholder="optional UUID" /></label>
+              <button type="submit">GET /conversations</button>
+            </form>
+            <form class="panel" data-action="messages">
+              <h3>Message History</h3>
+              <label>Conversation ID <input name="conversationId" data-fill="conversationId" placeholder="UUID" required /></label>
+              <label>Limit <input name="limit" type="number" min="1" max="100" value="30" /></label>
+              <label>Cursor <input name="cursor" placeholder="optional UUID" /></label>
+              <button type="submit">GET /conversations/:id/messages</button>
+            </form>
+            <article class="panel">
+              <h3>Socket.IO</h3>
+              <p id="socketStatus" class="status-text">Disconnected.</p>
+              <div class="button-row">
+                <button type="button" data-action="socket-connect">Connect</button>
+                <button type="button" class="secondary" data-action="socket-disconnect">Disconnect</button>
+              </div>
+            </article>
+            <form class="panel" data-action="socket-join">
+              <h3>Join Room</h3>
+              <label>Conversation ID <input name="conversationId" data-fill="conversationId" placeholder="UUID" required /></label>
+              <button type="submit">Emit join_conversation</button>
+            </form>
+            <form class="panel" data-action="socket-send">
+              <h3>Send Message</h3>
+              <label>Conversation ID <input name="conversationId" data-fill="conversationId" placeholder="UUID" required /></label>
+              <label>Text <textarea name="text" rows="3">Hello over Socket.IO.</textarea></label>
+              <button type="submit">Emit send_message</button>
+            </form>
+            <form class="panel" data-action="socket-typing">
+              <h3>Typing</h3>
+              <label>Conversation ID <input name="conversationId" data-fill="conversationId" placeholder="UUID" required /></label>
+              <label class="inline-check"><input name="isTyping" type="checkbox" checked /> Is typing</label>
+              <button type="submit">Emit typing</button>
+            </form>
+            <form class="panel" data-action="socket-seen">
+              <h3>Mark Seen</h3>
+              <label>Conversation ID <input name="conversationId" data-fill="conversationId" placeholder="UUID" required /></label>
+              <label>Message ID <input name="messageId" placeholder="UUID" required /></label>
+              <button type="submit">Emit mark_seen</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="response-dock" aria-label="Response output">
+          <div class="response-header">
+            <div>
+              <p class="eyebrow">Response</p>
+              <h3 id="responseTitle">No request yet</h3>
+            </div>
+            <button type="button" class="ghost" data-action="clear-response">Clear</button>
+          </div>
+          <pre id="responseOutput">Use a form or button to call the API.</pre>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
