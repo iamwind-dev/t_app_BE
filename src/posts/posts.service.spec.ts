@@ -3,11 +3,16 @@ import { PostsService } from './posts.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 type MockPrismaService = {
+  $transaction: jest.Mock;
   post: {
     create: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
     update: jest.Mock;
+  };
+  user: {
+    update: jest.Mock;
+    updateMany: jest.Mock;
   };
 };
 
@@ -59,11 +64,25 @@ describe('PostsService', () => {
 
   beforeEach(() => {
     prisma = {
+      $transaction: jest.fn(async (callback: unknown) => {
+        if (typeof callback === 'function') {
+          return callback({
+            post: prisma.post,
+            user: prisma.user,
+          });
+        }
+
+        return callback;
+      }),
       post: {
         create: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
+      },
+      user: {
+        update: jest.fn(),
+        updateMany: jest.fn(),
       },
     };
 
@@ -72,6 +91,7 @@ describe('PostsService', () => {
 
   it('creates a post for the authenticated user and trims content', async () => {
     prisma.post.create.mockResolvedValue(post);
+    prisma.user.update.mockResolvedValue({ id: author.id });
 
     const result = await service.createPost(author.id, {
       content: '  Hello from posts.  ',
@@ -86,6 +106,14 @@ describe('PostsService', () => {
         moderationStatus: 'APPROVED',
       },
       include: expect.any(Object),
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: author.id },
+      data: {
+        postCount: {
+          increment: 1,
+        },
+      },
     });
     expect(result).toEqual({
       post: {
@@ -185,12 +213,26 @@ describe('PostsService', () => {
     jest.spyOn(global, 'Date').mockImplementation(() => deletedAt);
     prisma.post.findFirst.mockResolvedValue(post);
     prisma.post.update.mockResolvedValue({ ...post, deletedAt });
+    prisma.user.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await service.deletePost(author.id, post.id);
 
     expect(prisma.post.update).toHaveBeenCalledWith({
       where: { id: post.id },
       data: { deletedAt },
+    });
+    expect(prisma.user.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: author.id,
+        postCount: {
+          gt: 0,
+        },
+      },
+      data: {
+        postCount: {
+          decrement: 1,
+        },
+      },
     });
     expect(result).toEqual({
       deleted: true,

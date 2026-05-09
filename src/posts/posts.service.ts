@@ -35,6 +35,18 @@ interface PostUpdateData {
   mediaUrls?: string[];
 }
 
+interface TransactionClient {
+  post: {
+    create(args: unknown): Promise<unknown>;
+    update(args: unknown): Promise<unknown>;
+    findFirst(args: unknown): Promise<unknown>;
+  };
+  user: {
+    update(args: unknown): Promise<unknown>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+  };
+}
+
 @Injectable()
 export class PostsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -45,14 +57,29 @@ export class PostsService {
 
     this.assertPostHasContentOrMedia(content, mediaUrls);
 
-    const post = (await this.prisma.post.create({
-      data: {
-        authorId: userId,
-        content,
-        mediaUrls,
-        moderationStatus: 'APPROVED',
-      },
-      include: this.postInclude(userId),
+    const post = (await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
+
+      const createdPost = await client.post.create({
+        data: {
+          authorId: userId,
+          content,
+          mediaUrls,
+          moderationStatus: 'APPROVED',
+        },
+        include: this.postInclude(userId),
+      });
+
+      await client.user.update({
+        where: { id: userId },
+        data: {
+          postCount: {
+            increment: 1,
+          },
+        },
+      });
+
+      return createdPost;
     })) as PostRecord;
 
     return {
@@ -140,9 +167,27 @@ export class PostsService {
     }
 
     const deletedAt = new Date();
-    await this.prisma.post.update({
-      where: { id: postId },
-      data: { deletedAt },
+    await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
+
+      await client.post.update({
+        where: { id: postId },
+        data: { deletedAt },
+      });
+
+      await client.user.updateMany({
+        where: {
+          id: userId,
+          postCount: {
+            gt: 0,
+          },
+        },
+        data: {
+          postCount: {
+            decrement: 1,
+          },
+        },
+      });
     });
 
     return {

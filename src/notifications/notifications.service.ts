@@ -10,6 +10,7 @@ import {
   NotificationListResponse,
   NotificationResponse,
   NotificationResponseItem,
+  UnreadNotificationsCountResponse,
 } from './types/notification-response.type';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -47,6 +48,17 @@ const notificationInclude = {
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getUnreadCount(currentUserId: string): Promise<UnreadNotificationsCountResponse> {
+    const unreadCount = await this.prisma.notification.count({
+      where: {
+        recipientId: currentUserId,
+        readAt: null,
+      },
+    });
+
+    return { unreadCount };
+  }
 
   async listNotifications(
     currentUserId: string,

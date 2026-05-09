@@ -2,11 +2,17 @@ import { BadGatewayException, BadRequestException, PayloadTooLargeException } fr
 import { UploadsService } from './uploads.service';
 import { IMAGE_STORAGE_PROVIDER } from './providers/image-storage.provider';
 import type { ImageStorageProvider } from './providers/image-storage.provider';
+import { PrismaService } from '../prisma/prisma.service';
 
 describe('UploadsService', () => {
   let service: UploadsService;
   let storageProvider: ImageStorageProvider & {
     uploadImage: jest.Mock;
+  };
+  let prisma: {
+    upload: {
+      create: jest.Mock;
+    };
   };
 
   const userId = '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
@@ -27,6 +33,11 @@ describe('UploadsService', () => {
     storageProvider = {
       uploadImage: jest.fn(),
     };
+    prisma = {
+      upload: {
+        create: jest.fn(),
+      },
+    };
 
     service = new UploadsService(
       {
@@ -38,6 +49,7 @@ describe('UploadsService', () => {
           return fallback;
         }),
       } as never,
+      prisma as unknown as PrismaService,
       storageProvider,
     );
   });
@@ -47,6 +59,12 @@ describe('UploadsService', () => {
       secureUrl: 'https://cdn.example.com/uploads/posts/public-id.jpg',
       publicId: 'uploads/posts/public-id',
     });
+    prisma.upload.create.mockResolvedValue({
+      id: 'upload-id',
+      secureUrl: 'https://cdn.example.com/uploads/posts/public-id.jpg',
+      publicId: 'uploads/posts/public-id',
+      type: 'post',
+    });
 
     const result = await service.uploadImage(userId, imageFile, { type: ' post ' });
 
@@ -55,8 +73,26 @@ describe('UploadsService', () => {
       file: imageFile,
       type: 'post',
     });
+    expect(prisma.upload.create).toHaveBeenCalledWith({
+      data: {
+        ownerId: userId,
+        secureUrl: 'https://cdn.example.com/uploads/posts/public-id.jpg',
+        publicId: 'uploads/posts/public-id',
+        type: 'post',
+        mimeType: 'image/jpeg',
+        sizeBytes: 1024,
+        originalName: 'photo.jpg',
+      },
+      select: {
+        id: true,
+        secureUrl: true,
+        publicId: true,
+        type: true,
+      },
+    });
     expect(result).toEqual({
       upload: {
+        id: 'upload-id',
         secureUrl: 'https://cdn.example.com/uploads/posts/public-id.jpg',
         publicId: 'uploads/posts/public-id',
         type: 'post',

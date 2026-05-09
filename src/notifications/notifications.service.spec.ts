@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type MockPrismaService = {
   notification: {
+    count: jest.Mock;
     findMany: jest.Mock;
     findFirst: jest.Mock;
     create: jest.Mock;
@@ -52,6 +53,7 @@ describe('NotificationsService', () => {
   beforeEach(() => {
     prisma = {
       notification: {
+        count: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
@@ -64,6 +66,20 @@ describe('NotificationsService', () => {
     };
 
     service = new NotificationsService(prisma as unknown as PrismaService);
+  });
+
+  it('returns unread notification count for the current user', async () => {
+    prisma.notification.count.mockResolvedValue(12);
+
+    const result = await service.getUnreadCount(recipientId);
+
+    expect(prisma.notification.count).toHaveBeenCalledWith({
+      where: {
+        recipientId,
+        readAt: null,
+      },
+    });
+    expect(result).toEqual({ unreadCount: 12 });
   });
 
   it('lists only current user notifications with pagination and actor summary', async () => {

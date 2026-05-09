@@ -39,6 +39,10 @@ export interface MarkAllNotificationsReadResponse {
   updatedCount: number;
 }
 
+export interface UnreadNotificationsCountResponse {
+  unreadCount: number;
+}
+
 export type NotificationTargetType = 'POST' | 'REPLY' | 'USER' | 'MESSAGE' | 'CONVERSATION';
 
 export interface CreateLikeNotificationInput {

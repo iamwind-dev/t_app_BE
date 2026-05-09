@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type MockUser = {
   id: string;
@@ -26,8 +27,10 @@ type MockPrismaService = {
   };
   follow: {
     findFirst: jest.Mock;
+    findMany: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   post: {
     findMany: jest.Mock;
@@ -38,6 +41,7 @@ type MockPrismaService = {
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: MockPrismaService;
+  let notificationsService: { createFollowNotification: jest.Mock };
 
   const user: MockUser = {
     id: '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1',
@@ -64,16 +68,34 @@ describe('UsersService', () => {
       },
       follow: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       post: {
         findMany: jest.fn(),
       },
-      $transaction: jest.fn((operations: unknown[]) => operations),
+      $transaction: jest.fn(async (callback: unknown) => {
+        if (typeof callback === 'function') {
+          return callback({
+            follow: prisma.follow,
+            user: prisma.user,
+          });
+        }
+
+        return callback;
+      }),
     };
 
-    service = new UsersService(prisma as unknown as PrismaService);
+    notificationsService = {
+      createFollowNotification: jest.fn(),
+    };
+
+    service = new UsersService(
+      prisma as unknown as PrismaService,
+      notificationsService as unknown as NotificationsService,
+    );
   });
 
   it('returns a public profile by id without private fields and includes follow state', async () => {
@@ -185,12 +207,8 @@ describe('UsersService', () => {
     prisma.user.findFirst
       .mockResolvedValueOnce(targetUser)
       .mockResolvedValueOnce(updatedTargetUser);
-    prisma.follow.create.mockResolvedValue({
-      id: 'follow-id',
-      followerId: user.id,
-      followingId: targetUser.id,
-      deletedAt: null,
-    });
+    prisma.follow.create.mockResolvedValue({ id: 'follow-id' });
+    prisma.follow.updateMany.mockResolvedValue({ count: 0 });
     prisma.user.update.mockResolvedValue(user);
     prisma.follow.findFirst
       .mockResolvedValueOnce(null)
@@ -209,10 +227,16 @@ describe('UsersService', () => {
         followerId: user.id,
         followingId: targetUser.id,
       },
+      select: { id: true },
     });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: user.id },
       data: { followingCount: { increment: 1 } },
+    });
+    expect(notificationsService.createFollowNotification).toHaveBeenCalledWith({
+      actorId: user.id,
+      recipientId: targetUser.id,
+      followId: 'follow-id',
     });
     expect(result.followersCount).toBe(3);
     expect(result.isFollowing).toBe(true);
@@ -324,5 +348,113 @@ describe('UsersService', () => {
         hasNextPage: false,
       },
     });
+  });
+
+  it('lists followers with cursor pagination and optional isFollowing context', async () => {
+    const targetUserId = '2b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
+    const followCreatedAt = new Date('2026-04-24T18:00:00.000Z');
+    prisma.user.findFirst.mockResolvedValue(user);
+
+    prisma.follow.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'follow-1',
+          followerId: 'follower-1',
+          followingId: targetUserId,
+          deletedAt: null,
+          createdAt: followCreatedAt,
+          follower: {
+            id: 'follower-1',
+            username: 'follower_user',
+            displayName: 'Follower User',
+            bio: null,
+            avatarUrl: null,
+            followerCount: 12,
+            followingCount: 22,
+          },
+        },
+      ])
+      .mockResolvedValueOnce([{ followingId: 'follower-1' }]);
+
+    const result = await service.getFollowers(targetUserId, { limit: 20 }, 'viewer-id');
+
+    expect(prisma.follow.findMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        followingId: targetUserId,
+        deletedAt: null,
+        follower: {
+          deletedAt: null,
+          status: 'active',
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 21,
+      cursor: undefined,
+      skip: undefined,
+      include: {
+        follower: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            bio: true,
+            avatarUrl: true,
+            followerCount: true,
+            followingCount: true,
+          },
+        },
+      },
+    });
+
+    expect(result).toEqual({
+      items: [
+        {
+          id: 'follower-1',
+          username: 'follower_user',
+          displayName: 'Follower User',
+          avatarUrl: null,
+          bio: null,
+          followersCount: 12,
+          followingCount: 22,
+          isFollowing: true,
+          followedAt: followCreatedAt,
+        },
+      ],
+      pageInfo: {
+        nextCursor: null,
+        hasNextPage: false,
+      },
+    });
+  });
+
+  it('lists following users with cursor pagination', async () => {
+    const targetUserId = '2b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
+    const followCreatedAt = new Date('2026-04-24T18:00:00.000Z');
+    prisma.user.findFirst.mockResolvedValue(user);
+
+    prisma.follow.findMany.mockResolvedValueOnce([
+      {
+        id: 'follow-1',
+        followerId: targetUserId,
+        followingId: 'following-1',
+        deletedAt: null,
+        createdAt: followCreatedAt,
+        following: {
+          id: 'following-1',
+          username: 'following_user',
+          displayName: 'Following User',
+          bio: 'hello',
+          avatarUrl: null,
+          followerCount: 1,
+          followingCount: 2,
+        },
+      },
+    ]);
+
+    const result = await service.getFollowing(targetUserId, { limit: 20 }, undefined);
+
+    expect(result.items[0]?.isFollowing).toBe(false);
+    expect(result.items[0]?.followedAt).toBe(followCreatedAt);
+    expect(result.pageInfo.hasNextPage).toBe(false);
   });
 });

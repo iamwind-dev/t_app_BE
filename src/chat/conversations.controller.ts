@@ -17,11 +17,13 @@ import type { AuthenticatedRequestUser } from '../common/decorators/current-user
 import { ChatService } from './chat.service';
 import { ConversationQueryDto } from './dto/conversation-query.dto';
 import { ConversationIdParamDto, DirectConversationParamDto } from './dto/chat-params.dto';
+import { MarkSeenBodyDto } from './dto/mark-seen.dto';
 import { MessagesQueryDto } from './dto/messages-query.dto';
 import { SendMessageBodyDto } from './dto/send-message.dto';
 import {
   ConversationListResponse,
   ConversationResponse,
+  MarkSeenResult,
   MessageListResponse,
   SendMessageResult,
 } from './types/chat-response.type';
@@ -86,6 +88,19 @@ export class ConversationsController {
       ...(body.content ? { content: body.content } : {}),
       ...(body.text ? { text: body.text } : {}),
       type: 'text',
+    });
+  }
+
+  @Post(':id/seen')
+  @ApiOkResponse({ description: 'Conversation message marked as seen over REST.' })
+  markSeen(
+    @CurrentUser() currentUser: AuthenticatedRequestUser,
+    @Param() params: ConversationIdParamDto,
+    @Body() body: MarkSeenBodyDto,
+  ): Promise<MarkSeenResult> {
+    return this.chatService.markSeen(currentUser.id, {
+      conversationId: params.id,
+      messageId: body.messageId,
     });
   }
 }

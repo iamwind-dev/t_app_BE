@@ -9,6 +9,7 @@ describe('ConversationsController', () => {
     listConversations: jest.Mock;
     getMessages: jest.Mock;
     sendTextMessage: jest.Mock;
+    markSeen: jest.Mock;
   };
 
   const currentUser = {
@@ -38,6 +39,7 @@ describe('ConversationsController', () => {
       listConversations: jest.fn(),
       getMessages: jest.fn(),
       sendTextMessage: jest.fn(),
+      markSeen: jest.fn(),
     };
     controller = new ConversationsController(chatService as unknown as ChatService);
   });
@@ -60,5 +62,32 @@ describe('ConversationsController', () => {
       type: 'text',
     });
     expect(result).toEqual({ message });
+  });
+
+  it('marks a conversation message as seen over REST', async () => {
+    const seenAt = new Date('2026-04-24T10:05:00.000Z');
+    chatService.markSeen.mockResolvedValue({
+      conversationId,
+      userId: currentUser.id,
+      messageId: message.id,
+      seenAt,
+    });
+
+    const result = await controller.markSeen(
+      currentUser,
+      { id: conversationId },
+      { messageId: message.id },
+    );
+
+    expect(chatService.markSeen).toHaveBeenCalledWith(currentUser.id, {
+      conversationId,
+      messageId: message.id,
+    });
+    expect(result).toEqual({
+      conversationId,
+      userId: currentUser.id,
+      messageId: message.id,
+      seenAt,
+    });
   });
 });

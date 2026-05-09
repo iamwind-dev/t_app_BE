@@ -1,9 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateReplyDto } from './dto/create-reply.dto';
+import { UpdateReplyDto } from './dto/update-reply.dto';
 import { ReplyQueryDto } from './dto/reply-query.dto';
-import { ReplyListResponse, ReplyResponse, ReplyResponseItem } from './types/reply-response.type';
+import {
+  DeleteReplyResponse,
+  ReplyListResponse,
+  ReplyResponse,
+  ReplyResponseItem,
+} from './types/reply-response.type';
 
 interface ContentAuthor {
   id: string;
@@ -23,6 +29,10 @@ interface ParentReplyTarget {
   authorId: string;
 }
 
+interface ReplyDeleteTarget extends ParentReplyTarget {
+  parentReplyId: string | null;
+}
+
 interface ReplyRecord {
   id: string;
   postId: string;
@@ -36,6 +46,11 @@ interface ReplyRecord {
   createdAt: Date;
   author: ContentAuthor;
   reactions?: Array<{ id: string }>;
+}
+
+interface ReplyUpdateData {
+  content?: string | null;
+  mediaUrls?: string[];
 }
 
 interface TransactionClient {
@@ -132,6 +147,80 @@ export class RepliesService {
       },
       query,
     });
+  }
+
+  async getReplyById(
+    currentUserId: string | undefined,
+    replyId: string,
+  ): Promise<ReplyResponse> {
+    const reply = await this.findActiveReplyById(replyId, currentUserId);
+
+    return { reply: this.toReplyResponseItem(reply) };
+  }
+
+  async updateReply(
+    currentUserId: string,
+    replyId: string,
+    dto: UpdateReplyDto,
+  ): Promise<ReplyResponse> {
+    const existingReply = await this.findActiveReplyForUpdate(replyId);
+    this.assertReplyOwnership(currentUserId, existingReply.authorId);
+
+    const data = this.buildUpdateData(dto);
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException({
+        code: 'VALIDATION_ERROR',
+        message: 'No valid fields were provided for update.',
+      });
+    }
+
+    const finalContent = data.content !== undefined ? data.content : existingReply.content;
+    const finalMediaUrls =
+      data.mediaUrls !== undefined ? data.mediaUrls : existingReply.mediaUrls;
+    this.assertReplyHasContentOrMedia(finalContent, finalMediaUrls);
+
+    const updatedReply = (await this.prisma.reply.update({
+      where: { id: replyId },
+      data,
+      include: this.replyInclude(currentUserId),
+    })) as ReplyRecord;
+
+    return { reply: this.toReplyResponseItem(updatedReply) };
+  }
+
+  async deleteReply(currentUserId: string, replyId: string): Promise<DeleteReplyResponse> {
+    const existingReply = await this.findActiveReplyForDelete(replyId);
+    this.assertReplyOwnership(currentUserId, existingReply.authorId);
+
+    const deletedAt = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
+      await client.reply.update({
+        where: { id: replyId },
+        data: { deletedAt },
+        select: { childReplyCount: true },
+      });
+
+      await client.post.update({
+        where: { id: existingReply.postId },
+        data: { replyCount: { decrement: 1 } },
+        select: { replyCount: true },
+      });
+
+      if (existingReply.parentReplyId) {
+        await client.reply.update({
+          where: { id: existingReply.parentReplyId },
+          data: { childReplyCount: { decrement: 1 } },
+          select: { childReplyCount: true },
+        });
+      }
+    });
+
+    return {
+      deleted: true,
+      id: replyId,
+      deletedAt,
+    };
   }
 
   private async createReply(input: {
@@ -248,6 +337,76 @@ export class RepliesService {
     return reply;
   }
 
+  private async findActiveReplyById(
+    replyId: string,
+    currentUserId: string | undefined,
+  ): Promise<ReplyRecord> {
+    const reply = (await this.prisma.reply.findFirst({
+      where: { id: replyId, deletedAt: null },
+      include: this.replyInclude(currentUserId),
+    })) as ReplyRecord | null;
+
+    if (!reply) {
+      throw new NotFoundException({
+        code: 'REPLY_NOT_FOUND',
+        message: 'Reply was not found.',
+      });
+    }
+
+    return reply;
+  }
+
+  private async findActiveReplyForUpdate(replyId: string): Promise<ReplyRecord> {
+    const reply = (await this.prisma.reply.findFirst({
+      where: { id: replyId, deletedAt: null },
+      select: {
+        id: true,
+        authorId: true,
+        content: true,
+        mediaUrls: true,
+        postId: true,
+        parentReplyId: true,
+        likeCount: true,
+        childReplyCount: true,
+        moderationStatus: true,
+        createdAt: true,
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    })) as ReplyRecord | null;
+
+    if (!reply) {
+      throw new NotFoundException({
+        code: 'REPLY_NOT_FOUND',
+        message: 'Reply was not found.',
+      });
+    }
+
+    return reply;
+  }
+
+  private async findActiveReplyForDelete(replyId: string): Promise<ReplyDeleteTarget> {
+    const reply = await this.prisma.reply.findFirst({
+      where: { id: replyId, deletedAt: null },
+      select: { id: true, postId: true, parentReplyId: true, authorId: true },
+    });
+
+    if (!reply) {
+      throw new NotFoundException({
+        code: 'REPLY_NOT_FOUND',
+        message: 'Reply was not found.',
+      });
+    }
+
+    return reply as ReplyDeleteTarget;
+  }
+
   private normalizeContent(content: string | undefined): string | null {
     const normalizedContent = content?.trim();
     return normalizedContent && normalizedContent.length > 0 ? normalizedContent : null;
@@ -266,6 +425,15 @@ export class RepliesService {
     }
   }
 
+  private assertReplyOwnership(currentUserId: string, authorId: string): void {
+    if (currentUserId !== authorId) {
+      throw new ForbiddenException({
+        code: 'REPLY_FORBIDDEN',
+        message: 'You are not allowed to modify this reply.',
+      });
+    }
+  }
+
   private toReplyResponseItem(reply: ReplyRecord): ReplyResponseItem {
     return {
       id: reply.id,
@@ -280,6 +448,20 @@ export class RepliesService {
       createdAt: reply.createdAt,
       isLikedByMe: (reply.reactions ?? []).length > 0,
     };
+  }
+
+  private buildUpdateData(dto: UpdateReplyDto): ReplyUpdateData {
+    const data: ReplyUpdateData = {};
+
+    if (dto.content !== undefined) {
+      data.content = this.normalizeContent(dto.content ?? undefined);
+    }
+
+    if (dto.mediaUrls !== undefined) {
+      data.mediaUrls = dto.mediaUrls;
+    }
+
+    return data;
   }
 
   private replyInclude(currentUserId: string | undefined): {

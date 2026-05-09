@@ -16,9 +16,13 @@ type MockTransactionClient = {
   };
   post: {
     update: jest.Mock;
+    updateMany: jest.Mock;
+    findUnique: jest.Mock;
   };
   reply: {
     update: jest.Mock;
+    updateMany: jest.Mock;
+    findUnique: jest.Mock;
   };
 };
 
@@ -57,9 +61,13 @@ describe('ReactionsService', () => {
       },
       post: {
         update: jest.fn(),
+        updateMany: jest.fn(),
+        findUnique: jest.fn(),
       },
       reply: {
         update: jest.fn(),
+        updateMany: jest.fn(),
+        findUnique: jest.fn(),
       },
     };
 
@@ -68,10 +76,14 @@ describe('ReactionsService', () => {
       post: {
         findFirst: jest.fn(),
         update: tx.post.update,
+        updateMany: tx.post.updateMany,
+        findUnique: tx.post.findUnique,
       },
       reply: {
         findFirst: jest.fn(),
         update: tx.reply.update,
+        updateMany: tx.reply.updateMany,
+        findUnique: tx.reply.findUnique,
       },
       $transaction: jest.fn((callback: (client: MockTransactionClient) => unknown) =>
         Promise.resolve(callback(tx)),
@@ -146,9 +158,15 @@ describe('ReactionsService', () => {
   });
 
   it('unlikes a post and decrements likeCount without going below zero', async () => {
-    prisma.post.findFirst.mockResolvedValue({ id: postId, likeCount: 1, deletedAt: null });
+    prisma.post.findFirst.mockResolvedValue({
+      id: postId,
+      authorId: 'post-author-id',
+      likeCount: 1,
+      deletedAt: null,
+    });
     prisma.postReaction.findUnique.mockResolvedValue({ id: 'reaction-id' });
-    prisma.post.update.mockResolvedValue({ id: postId, likeCount: 0 });
+    prisma.post.updateMany.mockResolvedValue({ count: 1 });
+    prisma.post.findUnique.mockResolvedValue({ likeCount: 0 });
 
     const result = await service.unlikePost(userId, postId);
 
@@ -161,21 +179,40 @@ describe('ReactionsService', () => {
         },
       },
     });
-    expect(prisma.post.update).toHaveBeenCalledWith({
+    expect(prisma.post.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: postId,
+        likeCount: {
+          gt: 0,
+        },
+      },
+      data: {
+        likeCount: {
+          decrement: 1,
+        },
+      },
+    });
+    expect(prisma.post.findUnique).toHaveBeenCalledWith({
       where: { id: postId },
-      data: { likeCount: 0 },
       select: { likeCount: true },
     });
     expect(result).toEqual({ postId, likeCount: 0, isLiked: false });
   });
 
   it('returns a valid unlike response when the post was not liked', async () => {
-    prisma.post.findFirst.mockResolvedValue({ id: postId, likeCount: 5, deletedAt: null });
+    prisma.post.findFirst.mockResolvedValue({
+      id: postId,
+      authorId: 'post-author-id',
+      likeCount: 5,
+      deletedAt: null,
+    });
     prisma.postReaction.findUnique.mockResolvedValue(null);
+    prisma.post.findUnique.mockResolvedValue({ likeCount: 5 });
 
     const result = await service.unlikePost(userId, postId);
 
     expect(prisma.postReaction.delete).not.toHaveBeenCalled();
+    expect(prisma.post.updateMany).not.toHaveBeenCalled();
     expect(result).toEqual({ postId, likeCount: 5, isLiked: false });
   });
 
@@ -226,13 +263,62 @@ describe('ReactionsService', () => {
     expect(result).toEqual({ replyId, likeCount: 5, isLiked: true });
   });
 
+  it('unlikes a reply and decrements likeCount without going below zero', async () => {
+    prisma.reply.findFirst.mockResolvedValue({
+      id: replyId,
+      authorId: 'reply-author-id',
+      likeCount: 1,
+      deletedAt: null,
+    });
+    prisma.replyReaction.findUnique.mockResolvedValue({ id: 'reaction-id' });
+    prisma.reply.updateMany.mockResolvedValue({ count: 1 });
+    prisma.reply.findUnique.mockResolvedValue({ likeCount: 0 });
+
+    const result = await service.unlikeReply(userId, replyId);
+
+    expect(prisma.replyReaction.delete).toHaveBeenCalledWith({
+      where: {
+        replyId_userId_type: {
+          replyId,
+          userId,
+          type: 'LIKE',
+        },
+      },
+    });
+    expect(prisma.reply.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: replyId,
+        likeCount: {
+          gt: 0,
+        },
+      },
+      data: {
+        likeCount: {
+          decrement: 1,
+        },
+      },
+    });
+    expect(prisma.reply.findUnique).toHaveBeenCalledWith({
+      where: { id: replyId },
+      select: { likeCount: true },
+    });
+    expect(result).toEqual({ replyId, likeCount: 0, isLiked: false });
+  });
+
   it('returns a valid unlike response when the reply was not liked', async () => {
-    prisma.reply.findFirst.mockResolvedValue({ id: replyId, likeCount: 4, deletedAt: null });
+    prisma.reply.findFirst.mockResolvedValue({
+      id: replyId,
+      authorId: 'reply-author-id',
+      likeCount: 4,
+      deletedAt: null,
+    });
     prisma.replyReaction.findUnique.mockResolvedValue(null);
+    prisma.reply.findUnique.mockResolvedValue({ likeCount: 4 });
 
     const result = await service.unlikeReply(userId, replyId);
 
     expect(prisma.replyReaction.delete).not.toHaveBeenCalled();
+    expect(prisma.reply.updateMany).not.toHaveBeenCalled();
     expect(result).toEqual({ replyId, likeCount: 4, isLiked: false });
   });
 

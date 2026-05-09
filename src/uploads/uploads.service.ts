@@ -10,6 +10,7 @@ import { UploadImageDto } from './dto/upload-image.dto';
 import { IMAGE_STORAGE_PROVIDER } from './providers/image-storage.provider';
 import type { ImageStorageProvider } from './providers/image-storage.provider';
 import { UploadImageResponse, UploadImageType } from './types/upload-response.type';
+import { PrismaService } from '../prisma/prisma.service';
 
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedUploadTypes = new Set<UploadImageType>(['post', 'reply', 'profile_avatar']);
@@ -19,6 +20,7 @@ const defaultMaxImageSizeBytes = 5 * 1024 * 1024;
 export class UploadsService {
   constructor(
     private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
     @Inject(IMAGE_STORAGE_PROVIDER)
     private readonly storageProvider: ImageStorageProvider,
   ) {}
@@ -42,11 +44,30 @@ export class UploadsService {
         throw this.providerFailedException();
       }
 
-      return {
-        upload: {
+      const upload = await this.prisma.upload.create({
+        data: {
+          ownerId: userId,
           secureUrl: storedImage.secureUrl,
           publicId: storedImage.publicId,
           type,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          originalName: file.originalname || null,
+        },
+        select: {
+          id: true,
+          secureUrl: true,
+          publicId: true,
+          type: true,
+        },
+      });
+
+      return {
+        upload: {
+          id: upload.id,
+          secureUrl: upload.secureUrl,
+          publicId: upload.publicId,
+          type: upload.type as UploadImageType,
         },
       };
     } catch (error) {

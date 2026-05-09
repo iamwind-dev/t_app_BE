@@ -9,6 +9,7 @@ import { validateEnv } from './config/env.validation';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { DemoModule } from './demo/demo.module';
+import { DevicesModule } from './devices/devices.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PostsModule } from './posts/posts.module';
 import { ReactionsModule } from './reactions/reactions.module';
@@ -30,6 +31,7 @@ import { UsersModule } from './users/users.module';
     ChatModule,
     NotificationsModule,
     UploadsModule,
+    DevicesModule,
     DemoModule,
   ],
   controllers: [AppController],

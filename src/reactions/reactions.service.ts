@@ -22,9 +22,13 @@ interface TransactionClient {
   };
   post: {
     update(args: unknown): Promise<{ likeCount: number }>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+    findUnique(args: unknown): Promise<{ likeCount: number } | null>;
   };
   reply: {
     update(args: unknown): Promise<{ likeCount: number }>;
+    updateMany(args: unknown): Promise<{ count: number }>;
+    findUnique(args: unknown): Promise<{ likeCount: number } | null>;
   };
 }
 
@@ -99,7 +103,7 @@ export class ReactionsService {
   }
 
   async unlikePost(userId: string, postId: string): Promise<PostReactionResponse> {
-    const post = await this.findActivePost(postId);
+    await this.findActivePost(postId);
 
     return this.prisma.$transaction(async (tx) => {
       const client = tx as TransactionClient;
@@ -110,14 +114,20 @@ export class ReactionsService {
           type: 'LIKE',
         },
       };
+
       const existingReaction = await client.postReaction.findUnique({
         where: reactionWhere,
       });
 
       if (!existingReaction) {
+        const current = await client.post.findUnique({
+          where: { id: postId },
+          select: { likeCount: true },
+        });
+
         return {
           postId,
-          likeCount: post.likeCount,
+          likeCount: current?.likeCount ?? 0,
           isLiked: false,
         };
       }
@@ -126,15 +136,28 @@ export class ReactionsService {
         where: reactionWhere,
       });
 
-      const updatedPost = await client.post.update({
+      await client.post.updateMany({
+        where: {
+          id: postId,
+          likeCount: {
+            gt: 0,
+          },
+        },
+        data: {
+          likeCount: {
+            decrement: 1,
+          },
+        },
+      });
+
+      const updatedPost = await client.post.findUnique({
         where: { id: postId },
-        data: { likeCount: Math.max(post.likeCount - 1, 0) },
         select: { likeCount: true },
       });
 
       return {
         postId,
-        likeCount: updatedPost.likeCount,
+        likeCount: updatedPost?.likeCount ?? 0,
         isLiked: false,
       };
     });
@@ -204,7 +227,7 @@ export class ReactionsService {
   }
 
   async unlikeReply(userId: string, replyId: string): Promise<ReplyReactionResponse> {
-    const reply = await this.findActiveReply(replyId);
+    await this.findActiveReply(replyId);
 
     return this.prisma.$transaction(async (tx) => {
       const client = tx as TransactionClient;
@@ -215,14 +238,20 @@ export class ReactionsService {
           type: 'LIKE',
         },
       };
+
       const existingReaction = await client.replyReaction.findUnique({
         where: reactionWhere,
       });
 
       if (!existingReaction) {
+        const current = await client.reply.findUnique({
+          where: { id: replyId },
+          select: { likeCount: true },
+        });
+
         return {
           replyId,
-          likeCount: reply.likeCount,
+          likeCount: current?.likeCount ?? 0,
           isLiked: false,
         };
       }
@@ -231,15 +260,28 @@ export class ReactionsService {
         where: reactionWhere,
       });
 
-      const updatedReply = await client.reply.update({
+      await client.reply.updateMany({
+        where: {
+          id: replyId,
+          likeCount: {
+            gt: 0,
+          },
+        },
+        data: {
+          likeCount: {
+            decrement: 1,
+          },
+        },
+      });
+
+      const updatedReply = await client.reply.findUnique({
         where: { id: replyId },
-        data: { likeCount: Math.max(reply.likeCount - 1, 0) },
         select: { likeCount: true },
       });
 
       return {
         replyId,
-        likeCount: updatedReply.likeCount,
+        likeCount: updatedReply?.likeCount ?? 0,
         isLiked: false,
       };
     });

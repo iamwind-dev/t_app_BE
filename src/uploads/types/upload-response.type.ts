@@ -2,6 +2,7 @@ export type UploadImageType = 'post' | 'reply' | 'profile_avatar';
 
 export interface UploadImageResponse {
   upload: {
+    id: string;
     secureUrl: string;
     publicId: string;
     type: UploadImageType;

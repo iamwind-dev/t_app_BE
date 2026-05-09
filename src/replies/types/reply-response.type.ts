@@ -28,3 +28,9 @@ export interface ReplyListResponse {
     hasNextPage: boolean;
   };
 }
+
+export interface DeleteReplyResponse {
+  deleted: true;
+  id: string;
+  deletedAt: Date;
+}

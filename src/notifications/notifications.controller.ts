@@ -10,6 +10,7 @@ import {
   MarkAllNotificationsReadResponse,
   NotificationListResponse,
   NotificationResponse,
+  UnreadNotificationsCountResponse,
 } from './types/notification-response.type';
 
 @ApiTags('Notifications')
@@ -18,6 +19,14 @@ import {
 @Controller('notifications')
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
+
+  @Get('unread-count')
+  @ApiOkResponse({ description: 'Unread notification count.' })
+  getUnreadCount(
+    @CurrentUser() currentUser: AuthenticatedRequestUser,
+  ): Promise<UnreadNotificationsCountResponse> {
+    return this.notificationsService.getUnreadCount(currentUser.id);
+  }
 
   @Get()
   @ApiOkResponse({ description: 'Current user notifications.' })
