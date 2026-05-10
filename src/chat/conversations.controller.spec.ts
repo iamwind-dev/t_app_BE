@@ -10,6 +10,7 @@ describe('ConversationsController', () => {
     getMessages: jest.Mock;
     sendTextMessage: jest.Mock;
     markSeen: jest.Mock;
+    deleteMessage: jest.Mock;
   };
 
   const currentUser = {
@@ -40,6 +41,7 @@ describe('ConversationsController', () => {
       getMessages: jest.fn(),
       sendTextMessage: jest.fn(),
       markSeen: jest.fn(),
+      deleteMessage: jest.fn(),
     };
     controller = new ConversationsController(chatService as unknown as ChatService);
   });
@@ -88,6 +90,33 @@ describe('ConversationsController', () => {
       userId: currentUser.id,
       messageId: message.id,
       seenAt,
+    });
+  });
+
+  it('soft deletes a conversation message over REST', async () => {
+    const deletedAt = new Date('2026-04-24T10:10:00.000Z');
+    chatService.deleteMessage.mockResolvedValue({
+      deleted: true,
+      id: message.id,
+      conversationId,
+      deletedAt,
+    });
+
+    const result = await controller.deleteMessage(currentUser, {
+      id: conversationId,
+      messageId: message.id,
+    });
+
+    expect(chatService.deleteMessage).toHaveBeenCalledWith(
+      currentUser.id,
+      conversationId,
+      message.id,
+    );
+    expect(result).toEqual({
+      deleted: true,
+      id: message.id,
+      conversationId,
+      deletedAt,
     });
   });
 });

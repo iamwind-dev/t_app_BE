@@ -11,4 +11,18 @@ export interface PublicAuthUser {
 export interface AuthResponse {
   user: PublicAuthUser;
   accessToken: string;
+  refreshToken: string;
+}
+
+export interface TokenRefreshResponse {
+  accessToken: string;
+  refreshToken: string;
+}
+
+export interface LogoutResponse {
+  loggedOut: true;
+}
+
+export interface ChangePasswordResponse {
+  changed: true;
 }

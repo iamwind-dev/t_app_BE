@@ -72,3 +72,10 @@ export interface MarkSeenResult {
   seenAt: Date;
   skipped?: boolean;
 }
+
+export interface DeleteMessageResponse {
+  deleted: boolean;
+  id: string;
+  conversationId: string;
+  deletedAt: Date;
+}

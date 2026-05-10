@@ -1,6 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushNotificationsService } from './push/push-notifications.service';
 
 type MockPrismaService = {
   notification: {
@@ -19,6 +20,9 @@ type MockPrismaService = {
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let prisma: MockPrismaService;
+  let pushNotificationsService: {
+    sendNotification: jest.Mock;
+  };
 
   const recipientId = '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
   const actorId = '02d50f39-eef6-4edb-85c0-2dd8d020df3a';
@@ -64,8 +68,14 @@ describe('NotificationsService', () => {
         findUnique: jest.fn(),
       },
     };
+    pushNotificationsService = {
+      sendNotification: jest.fn(),
+    };
 
-    service = new NotificationsService(prisma as unknown as PrismaService);
+    service = new NotificationsService(
+      prisma as unknown as PrismaService,
+      pushNotificationsService as unknown as PushNotificationsService,
+    );
   });
 
   it('returns unread notification count for the current user', async () => {
@@ -233,6 +243,19 @@ describe('NotificationsService', () => {
     });
     expect(created?.id).toBe(notificationId);
     expect(skipped).toBeNull();
+    expect(pushNotificationsService.sendNotification).toHaveBeenCalledTimes(1);
+    expect(pushNotificationsService.sendNotification).toHaveBeenCalledWith({
+      id: notificationId,
+      type: 'LIKE',
+      recipientId,
+      title: 'New notification',
+      body: 'Other User liked your post.',
+      targetType: 'POST',
+      targetId: postId,
+      metadata: {
+        postPreview: 'Hello from Threads-like app.',
+      },
+    });
   });
 
   it('creates a message notification after message persistence', async () => {
@@ -270,5 +293,22 @@ describe('NotificationsService', () => {
       include: expect.any(Object),
     });
     expect(result?.type).toBe('MESSAGE');
+  });
+
+  it('does not fail notification creation when push delivery fails', async () => {
+    prisma.user.findUnique.mockResolvedValue(actor);
+    prisma.notification.create.mockResolvedValue(notification);
+    pushNotificationsService.sendNotification.mockRejectedValue(new Error('fcm failed'));
+
+    const result = await service.createLikeNotification({
+      actorId,
+      recipientId,
+      targetType: 'POST',
+      targetId: postId,
+      sourceType: 'POST_REACTION',
+      sourceId,
+    });
+
+    expect(result?.id).toBe(notificationId);
   });
 });

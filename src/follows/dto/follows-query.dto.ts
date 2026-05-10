@@ -1,7 +1,7 @@
 import { Transform } from 'class-transformer';
 import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
-export class UserFollowsQueryDto {
+export class FollowsQueryDto {
   @IsOptional()
   @Transform(({ value }) => (value === undefined ? undefined : Number(value)))
   @IsInt({ message: 'Invalid pagination limit.' })
@@ -14,4 +14,3 @@ export class UserFollowsQueryDto {
   @IsUUID('4', { message: 'Invalid cursor.' })
   cursor?: string;
 }
-

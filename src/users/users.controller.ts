@@ -1,11 +1,9 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
-  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -14,11 +12,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedRequestUser } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
-import { UserFollowsQueryDto } from './dto/user-follows-query.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserIdParamDto, UsernameParamDto } from './dto/user-params.dto';
 import { UserPostsQueryDto } from './dto/user-posts-query.dto';
-import { UserFollowsPage } from './types/user-follows.type';
 import { PublicUserProfile, UserPostsPage } from './types/user-profile.type';
 import { UsersService } from './users.service';
 
@@ -50,30 +46,6 @@ export class UsersController {
     return { user };
   }
 
-  @Post(':id/follow')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOkResponse({ description: 'Current user followed the selected user.' })
-  async followUser(
-    @CurrentUser() currentUser: AuthenticatedRequestUser,
-    @Param() params: UserIdParamDto,
-  ): Promise<{ user: PublicUserProfile }> {
-    const user = await this.usersService.followUser(currentUser.id, params.id);
-    return { user };
-  }
-
-  @Delete(':id/follow')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
-  @ApiOkResponse({ description: 'Current user unfollowed the selected user.' })
-  async unfollowUser(
-    @CurrentUser() currentUser: AuthenticatedRequestUser,
-    @Param() params: UserIdParamDto,
-  ): Promise<{ user: PublicUserProfile }> {
-    const user = await this.usersService.unfollowUser(currentUser.id, params.id);
-    return { user };
-  }
-
   @Get(':id/posts')
   @ApiOkResponse({ description: 'Posts for a user profile.' })
   async getUserPosts(
@@ -81,28 +53,6 @@ export class UsersController {
     @Query() query: UserPostsQueryDto,
   ): Promise<UserPostsPage> {
     return this.usersService.getUserPosts(params.id, query);
-  }
-
-  @Get(':id/followers')
-  @UseGuards(OptionalJwtAuthGuard)
-  @ApiOkResponse({ description: 'Followers for a user profile.' })
-  getFollowers(
-    @Param() params: UserIdParamDto,
-    @Query() query: UserFollowsQueryDto,
-    @CurrentUser() currentUser?: AuthenticatedRequestUser,
-  ): Promise<UserFollowsPage> {
-    return this.usersService.getFollowers(params.id, query, currentUser?.id);
-  }
-
-  @Get(':id/following')
-  @UseGuards(OptionalJwtAuthGuard)
-  @ApiOkResponse({ description: 'Following list for a user profile.' })
-  getFollowing(
-    @Param() params: UserIdParamDto,
-    @Query() query: UserFollowsQueryDto,
-    @CurrentUser() currentUser?: AuthenticatedRequestUser,
-  ): Promise<UserFollowsPage> {
-    return this.usersService.getFollowing(params.id, query, currentUser?.id);
   }
 
   @Get(':id')

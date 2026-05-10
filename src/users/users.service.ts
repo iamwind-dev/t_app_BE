@@ -4,11 +4,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { NotificationsService } from '../notifications/notifications.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
-import { UserFollowsQueryDto } from './dto/user-follows-query.dto';
 import { UserPostsQueryDto } from './dto/user-posts-query.dto';
-import { FollowListItemProfile, UserFollowsPage } from './types/user-follows.type';
 import { PublicUserProfile, UserPostsPage } from './types/user-profile.type';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -44,39 +42,11 @@ interface UserPostRecord {
   };
 }
 
-interface FollowRecord {
-  id: string;
-  followerId: string;
-  followingId: string;
-  deletedAt: Date | null;
-  createdAt: Date;
-  follower?: Pick<
-    UserRecord,
-    | 'id'
-    | 'username'
-    | 'displayName'
-    | 'bio'
-    | 'avatarUrl'
-    | 'followerCount'
-    | 'followingCount'
-  >;
-  following?: Pick<
-    UserRecord,
-    | 'id'
-    | 'username'
-    | 'displayName'
-    | 'bio'
-    | 'avatarUrl'
-    | 'followerCount'
-    | 'followingCount'
-  >;
-}
-
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly notificationsService: NotificationsService,
+    private readonly uploadsService: UploadsService,
   ) {}
 
   async getProfileById(id: string, currentUserId?: string): Promise<PublicUserProfile> {
@@ -156,161 +126,29 @@ export class UsersService {
         data,
       })) as UserRecord;
 
+      if (data.avatarUrl !== undefined) {
+        if (data.avatarUrl) {
+          await this.uploadsService.syncAttachedUploads({
+            ownerId: userId,
+            secureUrls: [data.avatarUrl],
+            expectedType: 'profile_avatar',
+            attachedToType: 'profile_avatar',
+            attachedToId: userId,
+          });
+        } else {
+          await this.uploadsService.markResourceUploadsOrphaned({
+            ownerId: userId,
+            attachedToType: 'profile_avatar',
+            attachedToId: userId,
+          });
+        }
+      }
+
       return this.toPublicProfile(updatedUser, userId);
     } catch (error) {
       this.handleUniqueConstraintError(error);
       throw error;
     }
-  }
-
-  async followUser(currentUserId: string, targetUserId: string): Promise<PublicUserProfile> {
-    if (currentUserId === targetUserId) {
-      throw new BadRequestException({
-        code: 'FOLLOW_SELF_NOT_ALLOWED',
-        message: 'You cannot follow yourself.',
-      });
-    }
-
-    const targetUser = await this.findActiveUserById(targetUserId);
-
-    const activeFollow = (await this.prisma.follow.findFirst({
-      where: {
-        followerId: currentUserId,
-        followingId: targetUserId,
-        deletedAt: null,
-      },
-    })) as FollowRecord | null;
-
-    if (activeFollow) {
-      return this.toPublicProfile(targetUser, currentUserId);
-    }
-
-    const existingFollow = (await this.prisma.follow.findFirst({
-      where: {
-        followerId: currentUserId,
-        followingId: targetUserId,
-      },
-      select: {
-        id: true,
-        deletedAt: true,
-      },
-    })) as Pick<FollowRecord, 'id' | 'deletedAt'> | null;
-
-    let followId: string | null = null;
-    let activated = false;
-
-    try {
-      const result = await this.prisma.$transaction(async (tx) => {
-        if (existingFollow?.id) {
-          const updateResult = await tx.follow.updateMany({
-            where: {
-              id: existingFollow.id,
-              deletedAt: {
-                not: null,
-              },
-            },
-            data: { deletedAt: null },
-          });
-
-          if (updateResult.count === 0) {
-            return { followId: existingFollow.id, activated: false };
-          }
-
-          await tx.user.update({
-            where: { id: currentUserId },
-            data: { followingCount: { increment: 1 } },
-          });
-
-          await tx.user.update({
-            where: { id: targetUserId },
-            data: { followerCount: { increment: 1 } },
-          });
-
-          return { followId: existingFollow.id, activated: true };
-        }
-
-        const created = (await tx.follow.create({
-          data: {
-            followerId: currentUserId,
-            followingId: targetUserId,
-          },
-          select: { id: true },
-        })) as { id: string };
-
-        await tx.user.update({
-          where: { id: currentUserId },
-          data: { followingCount: { increment: 1 } },
-        });
-
-        await tx.user.update({
-          where: { id: targetUserId },
-          data: { followerCount: { increment: 1 } },
-        });
-
-        return { followId: created.id, activated: true };
-      });
-
-      followId = result.followId;
-      activated = result.activated;
-    } catch (error) {
-      if (!this.isPrismaUniqueConstraintError(error)) {
-        throw error;
-      }
-
-      followId = null;
-      activated = false;
-    }
-
-    if (activated && followId) {
-      await this.notificationsService.createFollowNotification({
-        actorId: currentUserId,
-        recipientId: targetUserId,
-        followId,
-      });
-    }
-
-    const updatedTargetUser = await this.findActiveUserById(targetUserId);
-    return this.toPublicProfile(updatedTargetUser, currentUserId);
-  }
-
-  async unfollowUser(currentUserId: string, targetUserId: string): Promise<PublicUserProfile> {
-    if (currentUserId === targetUserId) {
-      throw new BadRequestException({
-        code: 'FOLLOW_SELF_NOT_ALLOWED',
-        message: 'You cannot unfollow yourself.',
-      });
-    }
-
-    const targetUser = await this.findActiveUserById(targetUserId);
-    const activeFollow = (await this.prisma.follow.findFirst({
-      where: {
-        followerId: currentUserId,
-        followingId: targetUserId,
-        deletedAt: null,
-      },
-    })) as FollowRecord | null;
-
-    if (!activeFollow) {
-      return this.toPublicProfile(targetUser, currentUserId);
-    }
-
-    await this.prisma.$transaction([
-      this.prisma.follow.update({
-        where: { id: activeFollow.id },
-        data: { deletedAt: new Date() },
-      }),
-      this.prisma.user.update({
-        where: { id: currentUserId },
-        data: { followingCount: { decrement: 1 } },
-      }),
-      this.prisma.user.update({
-        where: { id: targetUserId },
-        data: { followerCount: { decrement: 1 } },
-      }),
-    ]);
-
-    const updatedTargetUser = await this.findActiveUserById(targetUserId);
-    return this.toPublicProfile(updatedTargetUser, currentUserId);
   }
 
   async getUserPosts(userId: string, query: UserPostsQueryDto): Promise<UserPostsPage> {
@@ -360,96 +198,6 @@ export class UsersService {
     };
   }
 
-  async getFollowers(
-    userId: string,
-    query: UserFollowsQueryDto,
-    currentUserId?: string,
-  ): Promise<UserFollowsPage> {
-    await this.ensureActiveUserExists(userId);
-
-    const limit = query.limit ?? 20;
-    const follows = (await this.prisma.follow.findMany({
-      where: {
-        followingId: userId,
-        deletedAt: null,
-        follower: {
-          deletedAt: null,
-          status: 'active',
-        },
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      cursor: query.cursor ? { id: query.cursor } : undefined,
-      skip: query.cursor ? 1 : undefined,
-      include: {
-        follower: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            bio: true,
-            avatarUrl: true,
-            followerCount: true,
-            followingCount: true,
-          },
-        },
-      },
-    })) as FollowRecord[];
-
-    return this.toFollowsPage({
-      follows,
-      limit,
-      currentUserId,
-      pickUser: (follow) => follow.follower,
-      followedAt: (follow) => follow.createdAt,
-    });
-  }
-
-  async getFollowing(
-    userId: string,
-    query: UserFollowsQueryDto,
-    currentUserId?: string,
-  ): Promise<UserFollowsPage> {
-    await this.ensureActiveUserExists(userId);
-
-    const limit = query.limit ?? 20;
-    const follows = (await this.prisma.follow.findMany({
-      where: {
-        followerId: userId,
-        deletedAt: null,
-        following: {
-          deletedAt: null,
-          status: 'active',
-        },
-      },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: limit + 1,
-      cursor: query.cursor ? { id: query.cursor } : undefined,
-      skip: query.cursor ? 1 : undefined,
-      include: {
-        following: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            bio: true,
-            avatarUrl: true,
-            followerCount: true,
-            followingCount: true,
-          },
-        },
-      },
-    })) as FollowRecord[];
-
-    return this.toFollowsPage({
-      follows,
-      limit,
-      currentUserId,
-      pickUser: (follow) => follow.following,
-      followedAt: (follow) => follow.createdAt,
-    });
-  }
-
   private async ensureActiveUserExists(userId: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: {
@@ -462,98 +210,6 @@ export class UsersService {
     if (!user) {
       throw this.userNotFoundException();
     }
-  }
-
-  private async findActiveUserById(userId: string): Promise<UserRecord> {
-    const user = (await this.prisma.user.findFirst({
-      where: {
-        id: userId,
-        deletedAt: null,
-        status: 'active',
-      },
-    })) as UserRecord | null;
-
-    if (!user) {
-      throw this.userNotFoundException();
-    }
-
-    return user;
-  }
-
-  private async toFollowsPage(input: {
-    follows: FollowRecord[];
-    limit: number;
-    currentUserId?: string;
-    pickUser: (
-      follow: FollowRecord,
-    ) => NonNullable<FollowRecord['follower']> | NonNullable<FollowRecord['following']> | undefined;
-    followedAt: (follow: FollowRecord) => Date;
-  }): Promise<UserFollowsPage> {
-    const hasNextPage = input.follows.length > input.limit;
-    const slice = input.follows.slice(0, input.limit);
-
-    const users = slice
-      .map((follow) => input.pickUser(follow))
-      .filter(
-        (
-          user,
-        ): user is NonNullable<FollowRecord['follower']> | NonNullable<FollowRecord['following']> =>
-          Boolean(user),
-      );
-    const userIds = users.map((user) => user.id);
-
-    const followingSet =
-      input.currentUserId && userIds.length > 0
-        ? new Set(
-            (
-              (await this.prisma.follow.findMany({
-                where: {
-                  followerId: input.currentUserId,
-                  followingId: {
-                    in: userIds,
-                  },
-                  deletedAt: null,
-                },
-                select: {
-                  followingId: true,
-                },
-              })) as Array<{ followingId: string }>
-            ).map((row) => row.followingId),
-          )
-        : new Set<string>();
-
-    const items = slice
-      .map((follow) => {
-        const user = input.pickUser(follow);
-        if (!user) {
-          return null;
-        }
-
-        const item: FollowListItemProfile = {
-          id: user.id,
-          username: user.username,
-          displayName: user.displayName,
-          avatarUrl: user.avatarUrl,
-          bio: user.bio,
-          followersCount: user.followerCount,
-          followingCount: user.followingCount,
-          isFollowing: input.currentUserId ? followingSet.has(user.id) : false,
-          followedAt: input.followedAt(follow),
-        };
-
-        return item;
-      })
-      .filter((item): item is FollowListItemProfile => item !== null);
-
-    const nextCursor = hasNextPage ? slice[slice.length - 1]?.id ?? null : null;
-
-    return {
-      items,
-      pageInfo: {
-        nextCursor,
-        hasNextPage,
-      },
-    };
   }
 
   private async toPublicProfile(

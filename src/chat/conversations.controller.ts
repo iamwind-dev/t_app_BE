@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpStatus,
   Param,
@@ -16,13 +17,18 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthenticatedRequestUser } from '../common/decorators/current-user.decorator';
 import { ChatService } from './chat.service';
 import { ConversationQueryDto } from './dto/conversation-query.dto';
-import { ConversationIdParamDto, DirectConversationParamDto } from './dto/chat-params.dto';
+import {
+  ConversationIdParamDto,
+  ConversationMessageParamDto,
+  DirectConversationParamDto,
+} from './dto/chat-params.dto';
 import { MarkSeenBodyDto } from './dto/mark-seen.dto';
 import { MessagesQueryDto } from './dto/messages-query.dto';
 import { SendMessageBodyDto } from './dto/send-message.dto';
 import {
   ConversationListResponse,
   ConversationResponse,
+  DeleteMessageResponse,
   MarkSeenResult,
   MessageListResponse,
   SendMessageResult,
@@ -102,5 +108,14 @@ export class ConversationsController {
       conversationId: params.id,
       messageId: body.messageId,
     });
+  }
+
+  @Delete(':id/messages/:messageId')
+  @ApiOkResponse({ description: 'Conversation message soft deleted.' })
+  deleteMessage(
+    @CurrentUser() currentUser: AuthenticatedRequestUser,
+    @Param() params: ConversationMessageParamDto,
+  ): Promise<DeleteMessageResponse> {
+    return this.chatService.deleteMessage(currentUser.id, params.id, params.messageId);
   }
 }

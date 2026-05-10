@@ -22,6 +22,7 @@ type MockPrismaService = {
     findMany: jest.Mock;
     findFirst: jest.Mock;
     create: jest.Mock;
+    update: jest.Mock;
     count: jest.Mock;
   };
   $transaction: jest.Mock;
@@ -107,6 +108,7 @@ describe('ChatService', () => {
         findMany: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
         count: jest.fn(),
       },
       $transaction: jest.fn((callback: (tx: MockPrismaService) => unknown) => callback(prisma)),
@@ -273,7 +275,10 @@ describe('ChatService', () => {
     const result = await service.getMessages(currentUser.id, conversationId, { limit: 1 });
 
     expect(prisma.message.findMany).toHaveBeenCalledWith({
-      where: { conversationId },
+      where: {
+        conversationId,
+        deletedAt: null,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 2,
       cursor: undefined,
@@ -493,5 +498,67 @@ describe('ChatService', () => {
       seenAt: updatedAt,
       skipped: true,
     });
+  });
+
+  it('soft deletes an author-owned message for a conversation member', async () => {
+    const deletedAt = new Date('2026-04-24T14:05:00.000Z');
+    jest.spyOn(global, 'Date').mockImplementation(() => deletedAt);
+    prisma.conversation.findUnique.mockResolvedValue({ id: conversationId });
+    prisma.conversationMember.findUnique.mockResolvedValue({ id: 'member-id' });
+    prisma.message.findFirst.mockResolvedValue({
+      id: firstMessageId,
+      conversationId,
+      senderId: currentUser.id,
+      deletedAt: null,
+    });
+    prisma.message.update.mockResolvedValue({ id: firstMessageId });
+
+    const result = await service.deleteMessage(currentUser.id, conversationId, firstMessageId);
+
+    expect(prisma.message.update).toHaveBeenCalledWith({
+      where: { id: firstMessageId },
+      data: { deletedAt },
+      select: { id: true },
+    });
+    expect(result).toEqual({
+      deleted: true,
+      id: firstMessageId,
+      conversationId,
+      deletedAt,
+    });
+
+    jest.restoreAllMocks();
+  });
+
+  it('keeps message delete idempotent when the message is already deleted', async () => {
+    const deletedAt = new Date('2026-04-24T14:05:00.000Z');
+    prisma.conversation.findUnique.mockResolvedValue({ id: conversationId });
+    prisma.conversationMember.findUnique.mockResolvedValue({ id: 'member-id' });
+    prisma.message.findFirst.mockResolvedValue({
+      id: firstMessageId,
+      conversationId,
+      senderId: currentUser.id,
+      deletedAt,
+    });
+
+    const result = await service.deleteMessage(currentUser.id, conversationId, firstMessageId);
+
+    expect(prisma.message.update).not.toHaveBeenCalled();
+    expect(result.deletedAt).toBe(deletedAt);
+  });
+
+  it('rejects deleting another member message', async () => {
+    prisma.conversation.findUnique.mockResolvedValue({ id: conversationId });
+    prisma.conversationMember.findUnique.mockResolvedValue({ id: 'member-id' });
+    prisma.message.findFirst.mockResolvedValue({
+      id: firstMessageId,
+      conversationId,
+      senderId: targetUser.id,
+      deletedAt: null,
+    });
+
+    await expect(
+      service.deleteMessage(currentUser.id, conversationId, firstMessageId),
+    ).rejects.toThrow(ForbiddenException);
   });
 });

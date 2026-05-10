@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { CreateReplyDto } from './dto/create-reply.dto';
 import { UpdateReplyDto } from './dto/update-reply.dto';
 import { ReplyQueryDto } from './dto/reply-query.dto';
@@ -68,6 +69,7 @@ export class RepliesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly uploadsService: UploadsService,
   ) {}
 
   async createPostReply(
@@ -185,6 +187,16 @@ export class RepliesService {
       include: this.replyInclude(currentUserId),
     })) as ReplyRecord;
 
+    if (data.mediaUrls !== undefined) {
+      await this.uploadsService.syncAttachedUploads({
+        ownerId: currentUserId,
+        secureUrls: updatedReply.mediaUrls,
+        expectedType: 'reply',
+        attachedToType: 'reply',
+        attachedToId: replyId,
+      });
+    }
+
     return { reply: this.toReplyResponseItem(updatedReply) };
   }
 
@@ -214,6 +226,12 @@ export class RepliesService {
           select: { childReplyCount: true },
         });
       }
+    });
+
+    await this.uploadsService.markResourceUploadsOrphaned({
+      ownerId: currentUserId,
+      attachedToType: 'reply',
+      attachedToId: replyId,
     });
 
     return {
@@ -265,6 +283,14 @@ export class RepliesService {
       }
 
       return createdReply;
+    });
+
+    await this.uploadsService.syncAttachedUploads({
+      ownerId: input.currentUserId,
+      secureUrls: mediaUrls,
+      expectedType: 'reply',
+      attachedToType: 'reply',
+      attachedToId: reply.id,
     });
 
     await this.notificationsService.createReplyNotification({

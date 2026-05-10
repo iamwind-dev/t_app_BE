@@ -9,6 +9,7 @@ import {
   PostResponseItem,
 } from './types/post-response.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 interface PostRecord {
   id: string;
@@ -49,7 +50,10 @@ interface TransactionClient {
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   async createPost(userId: string, dto: CreatePostDto): Promise<PostResponse> {
     const content = this.normalizeContent(dto.content);
@@ -81,6 +85,14 @@ export class PostsService {
 
       return createdPost;
     })) as PostRecord;
+
+    await this.uploadsService.syncAttachedUploads({
+      ownerId: userId,
+      secureUrls: mediaUrls,
+      expectedType: 'post',
+      attachedToType: 'post',
+      attachedToId: post.id,
+    });
 
     return {
       post: this.toPostResponseItem(post),
@@ -151,6 +163,16 @@ export class PostsService {
       include: this.postInclude(userId),
     })) as PostRecord;
 
+    if (data.mediaUrls !== undefined) {
+      await this.uploadsService.syncAttachedUploads({
+        ownerId: userId,
+        secureUrls: updatedPost.mediaUrls,
+        expectedType: 'post',
+        attachedToType: 'post',
+        attachedToId: postId,
+      });
+    }
+
     return {
       post: this.toPostResponseItem(updatedPost),
     };
@@ -188,6 +210,12 @@ export class PostsService {
           },
         },
       });
+    });
+
+    await this.uploadsService.markResourceUploadsOrphaned({
+      ownerId: userId,
+      attachedToType: 'post',
+      attachedToId: postId,
     });
 
     return {

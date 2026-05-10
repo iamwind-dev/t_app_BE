@@ -13,6 +13,7 @@ import {
   UnreadNotificationsCountResponse,
 } from './types/notification-response.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushNotificationsService } from './push/push-notifications.service';
 
 interface NotificationRecord {
   id: string;
@@ -47,7 +48,10 @@ const notificationInclude = {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly pushNotificationsService: PushNotificationsService,
+  ) {}
 
   async getUnreadCount(currentUserId: string): Promise<UnreadNotificationsCountResponse> {
     const unreadCount = await this.prisma.notification.count({
@@ -239,7 +243,10 @@ export class NotificationsService {
         include: notificationInclude,
       })) as unknown as NotificationRecord;
 
-      return this.toNotificationResponse(notification);
+      const response = this.toNotificationResponse(notification);
+      await this.dispatchPushNotification(response);
+
+      return response;
     } catch (error) {
       if (this.isPrismaUniqueConstraintError(error)) {
         return null;
@@ -279,6 +286,23 @@ export class NotificationsService {
     };
   }
 
+  private async dispatchPushNotification(notification: NotificationResponseItem): Promise<void> {
+    try {
+      await this.pushNotificationsService.sendNotification({
+        id: notification.id,
+        type: notification.type,
+        recipientId: notification.recipientId,
+        title: 'New notification',
+        body: notification.message,
+        targetType: notification.target.type,
+        targetId: notification.target.id,
+        metadata: this.toPushMetadata(notification.metadata),
+      });
+    } catch {
+      return;
+    }
+  }
+
   private notificationNotFoundException(): NotFoundException {
     return new NotFoundException({
       code: 'NOTIFICATION_NOT_FOUND',
@@ -303,5 +327,19 @@ export class NotificationsService {
 
   private toPrismaJson(value: unknown): Prisma.InputJsonValue | undefined {
     return value === undefined ? undefined : (value as Prisma.InputJsonValue);
+  }
+
+  private toPushMetadata(value: unknown): Record<string, string> {
+    if (!this.isPlainObject(value)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter((entry): entry is [string, string | number | boolean] =>
+          ['string', 'number', 'boolean'].includes(typeof entry[1]),
+        )
+        .map(([key, metadataValue]) => [key, String(metadataValue)]),
+    );
   }
 }

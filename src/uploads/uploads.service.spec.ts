@@ -12,6 +12,7 @@ describe('UploadsService', () => {
   let prisma: {
     upload: {
       create: jest.Mock;
+      updateMany: jest.Mock;
     };
   };
 
@@ -36,6 +37,7 @@ describe('UploadsService', () => {
     prisma = {
       upload: {
         create: jest.fn(),
+        updateMany: jest.fn(),
       },
     };
 
@@ -146,5 +148,110 @@ describe('UploadsService', () => {
 
   it('uses the image storage provider injection token', () => {
     expect(IMAGE_STORAGE_PROVIDER).toBe('IMAGE_STORAGE_PROVIDER');
+  });
+
+  it('attaches matching uploads and orphans removed resource uploads', async () => {
+    const now = new Date('2026-05-10T09:00:00.000Z');
+    jest.spyOn(global, 'Date').mockImplementation(() => now);
+    prisma.upload.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.syncAttachedUploads({
+      ownerId: userId,
+      secureUrls: [
+        ' https://cdn.example.com/uploads/posts/one.jpg ',
+        'https://cdn.example.com/uploads/posts/one.jpg',
+      ],
+      expectedType: 'post',
+      attachedToType: 'post',
+      attachedToId: '9e5c7e4b-76b7-4e35-9bd1-df7a22c908d1',
+    });
+
+    expect(prisma.upload.updateMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        ownerId: userId,
+        type: 'post',
+        secureUrl: {
+          in: ['https://cdn.example.com/uploads/posts/one.jpg'],
+        },
+        deletedAt: null,
+      },
+      data: {
+        status: 'attached',
+        attachedToType: 'post',
+        attachedToId: '9e5c7e4b-76b7-4e35-9bd1-df7a22c908d1',
+        attachedAt: now,
+        orphanedAt: null,
+      },
+    });
+    expect(prisma.upload.updateMany).toHaveBeenNthCalledWith(2, {
+      where: {
+        ownerId: userId,
+        type: 'post',
+        attachedToType: 'post',
+        attachedToId: '9e5c7e4b-76b7-4e35-9bd1-df7a22c908d1',
+        status: 'attached',
+        deletedAt: null,
+        secureUrl: {
+          notIn: ['https://cdn.example.com/uploads/posts/one.jpg'],
+        },
+      },
+      data: {
+        status: 'orphaned',
+        orphanedAt: now,
+      },
+    });
+
+    jest.restoreAllMocks();
+  });
+
+  it('orphans all resource uploads when syncing an empty media list', async () => {
+    prisma.upload.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.syncAttachedUploads({
+      ownerId: userId,
+      secureUrls: [],
+      expectedType: 'reply',
+      attachedToType: 'reply',
+      attachedToId: '6d8d2f4f-23aa-41a5-9120-00d0a9ff8b32',
+    });
+
+    expect(prisma.upload.updateMany).toHaveBeenCalledTimes(1);
+    expect(prisma.upload.updateMany).toHaveBeenCalledWith({
+      where: {
+        ownerId: userId,
+        type: 'reply',
+        attachedToType: 'reply',
+        attachedToId: '6d8d2f4f-23aa-41a5-9120-00d0a9ff8b32',
+        status: 'attached',
+        deletedAt: null,
+      },
+      data: {
+        status: 'orphaned',
+        orphanedAt: expect.any(Date),
+      },
+    });
+  });
+
+  it('marks old pending uploads as orphaned for cleanup', async () => {
+    const olderThan = new Date('2026-05-09T09:00:00.000Z');
+    prisma.upload.updateMany.mockResolvedValue({ count: 2 });
+
+    const result = await service.markOldPendingUploadsOrphaned({ ownerId: userId, olderThan });
+
+    expect(result).toEqual({ count: 2 });
+    expect(prisma.upload.updateMany).toHaveBeenCalledWith({
+      where: {
+        ownerId: userId,
+        status: 'pending',
+        deletedAt: null,
+        createdAt: {
+          lt: olderThan,
+        },
+      },
+      data: {
+        status: 'orphaned',
+        orphanedAt: expect.any(Date),
+      },
+    });
   });
 });

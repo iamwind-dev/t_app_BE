@@ -15,6 +15,28 @@ import { PrismaService } from '../prisma/prisma.service';
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedUploadTypes = new Set<UploadImageType>(['post', 'reply', 'profile_avatar']);
 const defaultMaxImageSizeBytes = 5 * 1024 * 1024;
+const defaultPendingUploadTtlHours = 24;
+
+export type UploadAttachmentType = 'post' | 'reply' | 'profile_avatar';
+
+interface SyncAttachedUploadsInput {
+  ownerId: string;
+  secureUrls: string[];
+  expectedType: UploadImageType;
+  attachedToType: UploadAttachmentType;
+  attachedToId: string;
+}
+
+interface MarkResourceUploadsOrphanedInput {
+  ownerId: string;
+  attachedToType: UploadAttachmentType;
+  attachedToId: string;
+}
+
+interface MarkOldPendingUploadsOrphanedInput {
+  olderThan?: Date;
+  ownerId?: string;
+}
 
 @Injectable()
 export class UploadsService {
@@ -79,6 +101,89 @@ export class UploadsService {
     }
   }
 
+  async syncAttachedUploads(input: SyncAttachedUploadsInput): Promise<void> {
+    const secureUrls = this.uniqueSecureUrls(input.secureUrls);
+    const now = new Date();
+
+    if (secureUrls.length > 0) {
+      await this.prisma.upload.updateMany({
+        where: {
+          ownerId: input.ownerId,
+          type: input.expectedType,
+          secureUrl: {
+            in: secureUrls,
+          },
+          deletedAt: null,
+        },
+        data: {
+          status: 'attached',
+          attachedToType: input.attachedToType,
+          attachedToId: input.attachedToId,
+          attachedAt: now,
+          orphanedAt: null,
+        },
+      });
+    }
+
+    await this.prisma.upload.updateMany({
+      where: {
+        ownerId: input.ownerId,
+        type: input.expectedType,
+        attachedToType: input.attachedToType,
+        attachedToId: input.attachedToId,
+        status: 'attached',
+        deletedAt: null,
+        ...(secureUrls.length > 0
+          ? {
+              secureUrl: {
+                notIn: secureUrls,
+              },
+            }
+          : {}),
+      },
+      data: {
+        status: 'orphaned',
+        orphanedAt: now,
+      },
+    });
+  }
+
+  async markResourceUploadsOrphaned(input: MarkResourceUploadsOrphanedInput): Promise<void> {
+    await this.prisma.upload.updateMany({
+      where: {
+        ownerId: input.ownerId,
+        attachedToType: input.attachedToType,
+        attachedToId: input.attachedToId,
+        status: 'attached',
+        deletedAt: null,
+      },
+      data: {
+        status: 'orphaned',
+        orphanedAt: new Date(),
+      },
+    });
+  }
+
+  async markOldPendingUploadsOrphaned(
+    input: MarkOldPendingUploadsOrphanedInput = {},
+  ): Promise<{ count: number }> {
+    const olderThan = input.olderThan ?? this.defaultPendingUploadCutoff();
+    return this.prisma.upload.updateMany({
+      where: {
+        ...(input.ownerId ? { ownerId: input.ownerId } : {}),
+        status: 'pending',
+        deletedAt: null,
+        createdAt: {
+          lt: olderThan,
+        },
+      },
+      data: {
+        status: 'orphaned',
+        orphanedAt: new Date(),
+      },
+    });
+  }
+
   private validateUploadType(type: string): UploadImageType {
     const normalizedType = type?.trim() as UploadImageType;
 
@@ -129,5 +234,18 @@ export class UploadsService {
       code: 'UPLOAD_PROVIDER_FAILED',
       message: 'Image upload failed. Please try again.',
     });
+  }
+
+  private uniqueSecureUrls(secureUrls: string[]): string[] {
+    return [...new Set(secureUrls.map((url) => url.trim()).filter((url) => url.length > 0))];
+  }
+
+  private defaultPendingUploadCutoff(): Date {
+    const pendingUploadTtlHours = this.configService.get<number>(
+      'UPLOAD_PENDING_TTL_HOURS',
+      defaultPendingUploadTtlHours,
+    );
+
+    return new Date(Date.now() - pendingUploadTtlHours * 60 * 60 * 1000);
   }
 }

@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PostsService } from './posts.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 type MockPrismaService = {
   $transaction: jest.Mock;
@@ -39,6 +40,10 @@ type MockPost = {
 describe('PostsService', () => {
   let service: PostsService;
   let prisma: MockPrismaService;
+  let uploadsService: {
+    syncAttachedUploads: jest.Mock;
+    markResourceUploadsOrphaned: jest.Mock;
+  };
 
   const author = {
     id: '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1',
@@ -86,7 +91,15 @@ describe('PostsService', () => {
       },
     };
 
-    service = new PostsService(prisma as unknown as PrismaService);
+    uploadsService = {
+      syncAttachedUploads: jest.fn(),
+      markResourceUploadsOrphaned: jest.fn(),
+    };
+
+    service = new PostsService(
+      prisma as unknown as PrismaService,
+      uploadsService as unknown as UploadsService,
+    );
   });
 
   it('creates a post for the authenticated user and trims content', async () => {
@@ -114,6 +127,13 @@ describe('PostsService', () => {
           increment: 1,
         },
       },
+    });
+    expect(uploadsService.syncAttachedUploads).toHaveBeenCalledWith({
+      ownerId: author.id,
+      secureUrls: [],
+      expectedType: 'post',
+      attachedToType: 'post',
+      attachedToId: post.id,
     });
     expect(result).toEqual({
       post: {
@@ -197,7 +217,28 @@ describe('PostsService', () => {
       },
       include: expect.any(Object),
     });
+    expect(uploadsService.syncAttachedUploads).not.toHaveBeenCalled();
     expect(result.post.content).toBe('Updated content.');
+  });
+
+  it('syncs post uploads when media URLs are updated', async () => {
+    const mediaUrls = ['https://cdn.example.com/uploads/posts/one.jpg'];
+    prisma.post.findFirst.mockResolvedValue(post);
+    prisma.post.update.mockResolvedValue({
+      ...post,
+      mediaUrls,
+      reactions: [],
+    });
+
+    await service.updatePost(author.id, post.id, { mediaUrls });
+
+    expect(uploadsService.syncAttachedUploads).toHaveBeenCalledWith({
+      ownerId: author.id,
+      secureUrls: mediaUrls,
+      expectedType: 'post',
+      attachedToType: 'post',
+      attachedToId: post.id,
+    });
   });
 
   it('rejects update by a non-author', async () => {
@@ -238,6 +279,11 @@ describe('PostsService', () => {
       deleted: true,
       id: post.id,
       deletedAt,
+    });
+    expect(uploadsService.markResourceUploadsOrphaned).toHaveBeenCalledWith({
+      ownerId: author.id,
+      attachedToType: 'post',
+      attachedToId: post.id,
     });
 
     jest.restoreAllMocks();

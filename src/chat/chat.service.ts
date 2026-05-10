@@ -12,6 +12,7 @@ import {
   ConversationListResponse,
   ConversationMemberResponse,
   ConversationResponseItem,
+  DeleteMessageResponse,
   DirectConversationResult,
   MarkSeenResult,
   MessageListResponse,
@@ -81,6 +82,9 @@ const conversationInclude = {
     },
   },
   messages: {
+    where: {
+      deletedAt: null,
+    },
     take: 1,
     orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
     include: {
@@ -217,7 +221,10 @@ export class ChatService {
 
     const limit = query.limit ?? 30;
     const messages = (await this.prisma.message.findMany({
-      where: { conversationId },
+      where: {
+        conversationId,
+        deletedAt: null,
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       cursor: query.cursor ? { id: query.cursor } : undefined,
@@ -323,6 +330,7 @@ export class ChatService {
       where: {
         id: dto.messageId,
         conversationId: dto.conversationId,
+        deletedAt: null,
       },
       select: {
         id: true,
@@ -382,6 +390,65 @@ export class ChatService {
       userId: updatedMember.userId,
       messageId: updatedMember.lastSeenMessageId ?? dto.messageId,
       seenAt: updatedMember.lastSeenAt ?? message.createdAt,
+    };
+  }
+
+  async deleteMessage(
+    currentUserId: string,
+    conversationId: string,
+    messageId: string,
+  ): Promise<DeleteMessageResponse> {
+    await this.ensureConversationExists(conversationId);
+    await this.ensureConversationMember(conversationId, currentUserId);
+
+    const message = await this.prisma.message.findFirst({
+      where: {
+        id: messageId,
+        conversationId,
+      },
+      select: {
+        id: true,
+        conversationId: true,
+        senderId: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!message) {
+      throw new NotFoundException({
+        code: 'CHAT_MESSAGE_NOT_FOUND',
+        message: 'Message not found.',
+      });
+    }
+
+    if (message.senderId !== currentUserId) {
+      throw new ForbiddenException({
+        code: 'CHAT_MESSAGE_FORBIDDEN',
+        message: 'You are not allowed to delete this message.',
+      });
+    }
+
+    if (message.deletedAt) {
+      return {
+        deleted: true,
+        id: message.id,
+        conversationId: message.conversationId,
+        deletedAt: message.deletedAt,
+      };
+    }
+
+    const deletedAt = new Date();
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: { deletedAt },
+      select: { id: true },
+    });
+
+    return {
+      deleted: true,
+      id: message.id,
+      conversationId: message.conversationId,
+      deletedAt,
     };
   }
 
@@ -504,6 +571,7 @@ export class ChatService {
         senderId: {
           not: currentUserId,
         },
+        deletedAt: null,
         ...(currentMember?.lastSeenAt
           ? {
               createdAt: {

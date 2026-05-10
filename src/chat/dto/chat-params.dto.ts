@@ -9,3 +9,8 @@ export class ConversationIdParamDto {
   @IsUUID('4', { message: 'Invalid conversation id.' })
   id!: string;
 }
+
+export class ConversationMessageParamDto extends ConversationIdParamDto {
+  @IsUUID('4', { message: 'Invalid message id.' })
+  messageId!: string;
+}
