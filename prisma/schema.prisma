@@ -7,10 +7,19 @@ datasource db {
 }
 
 enum ModerationStatus {
+  SAFE
+  WARNING
+  RESTRICTED
   PENDING
   APPROVED
   REJECTED
   FLAGGED
+}
+
+enum VisibilityLevel {
+  NORMAL
+  LIMITED
+  COLLAPSED
 }
 
 enum ReactionType {
@@ -26,10 +35,13 @@ enum MessageType {
 }
 
 enum NotificationType {
+  NEW_MESSAGE
+  NEW_POST
   LIKE
   REPLY
   FOLLOW
   MESSAGE
+  SYSTEM
 }
 
 model User {
@@ -77,6 +89,14 @@ model Post {
   moderationStatus ModerationStatus @default(APPROVED)
   moderationScore  Float?
   moderationReason String?          @db.VarChar(500)
+  toxicityScore    Float?
+  moderationCategories String[]     @default([])
+  moderationMessage String?         @db.VarChar(500)
+  moderationHighlights Json?
+  moderationSuggestion String?      @db.VarChar(500)
+  moderationModel  String?          @db.VarChar(100)
+  visibilityLevel  VisibilityLevel  @default(NORMAL)
+  aiReviewedAt     DateTime?
   deletedAt        DateTime?
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
@@ -90,6 +110,7 @@ model Post {
   @@index([createdAt, id])
   @@index([deletedAt])
   @@index([moderationStatus, createdAt])
+  @@index([visibilityLevel, createdAt])
 }
 
 model Reply {
@@ -259,7 +280,7 @@ model Notification {
 
 model DeviceToken {
   id         String    @id @default(uuid()) @db.Uuid
-  userId     String    @db.Uuid
+  userId     String?   @db.Uuid
   token      String    @unique @db.VarChar(4096)
   platform   String    @db.VarChar(20)
   deviceId   String?   @db.VarChar(255)
@@ -269,7 +290,7 @@ model DeviceToken {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@index([lastUsedAt])

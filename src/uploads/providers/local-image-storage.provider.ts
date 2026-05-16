@@ -4,7 +4,12 @@ import { randomUUID } from 'crypto';
 import { mkdir, writeFile } from 'fs/promises';
 import { extname, join } from 'path';
 import type { ImageStorageProvider } from './image-storage.provider';
-import type { ImageUploadRequest, StoredImage } from '../types/upload-response.type';
+import type {
+  ImageUploadRequest,
+  StoredImage,
+  StoredVideo,
+  VideoUploadRequest,
+} from '../types/upload-response.type';
 
 const uploadFolderByType = {
   post: 'posts',
@@ -36,6 +41,10 @@ export class LocalImageStorageProvider implements ImageStorageProvider {
       secureUrl: `${publicBaseUrl.replace(/\/$/, '')}/${folder}/${fileName}`,
       publicId,
     };
+  }
+
+  async uploadVideo(_input: VideoUploadRequest): Promise<StoredVideo> {
+    throw new Error('Local video upload is not supported.');
   }
 
   private getSafeExtension(file: Express.Multer.File): string {

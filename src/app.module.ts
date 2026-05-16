@@ -15,6 +15,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { PostsModule } from './posts/posts.module';
 import { ReactionsModule } from './reactions/reactions.module';
 import { RepliesModule } from './replies/replies.module';
+import { ModerationModule } from './modules/moderation/moderation.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { UsersModule } from './users/users.module';
 
@@ -32,6 +33,7 @@ import { UsersModule } from './users/users.module';
     ReactionsModule,
     ChatModule,
     NotificationsModule,
+    ModerationModule,
     UploadsModule,
     DevicesModule,
     DemoModule,

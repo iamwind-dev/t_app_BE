@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { PostsService } from './posts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { ModerationService } from '../modules/moderation/moderation.service';
 
 type MockPrismaService = {
   $transaction: jest.Mock;
@@ -25,6 +26,14 @@ type MockPost = {
   likeCount: number;
   replyCount: number;
   moderationStatus: string;
+  visibilityLevel: string;
+  toxicityScore: number | null;
+  moderationCategories: string[];
+  moderationMessage: string | null;
+  moderationHighlights: unknown;
+  moderationSuggestion: string | null;
+  moderationModel: string | null;
+  aiReviewedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -44,6 +53,10 @@ describe('PostsService', () => {
     syncAttachedUploads: jest.Mock;
     markResourceUploadsOrphaned: jest.Mock;
   };
+  let moderationService: {
+    moderateText: jest.Mock;
+    toVisibilityLevel: jest.Mock;
+  };
 
   const author = {
     id: '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1',
@@ -60,6 +73,14 @@ describe('PostsService', () => {
     likeCount: 3,
     replyCount: 2,
     moderationStatus: 'APPROVED',
+    visibilityLevel: 'NORMAL',
+    toxicityScore: 0,
+    moderationCategories: [],
+    moderationMessage: null,
+    moderationHighlights: [],
+    moderationSuggestion: null,
+    moderationModel: 'mask_partial_char',
+    aiReviewedAt: createdAt,
     createdAt,
     updatedAt: createdAt,
     deletedAt: null,
@@ -95,10 +116,23 @@ describe('PostsService', () => {
       syncAttachedUploads: jest.fn(),
       markResourceUploadsOrphaned: jest.fn(),
     };
+    moderationService = {
+      moderateText: jest.fn().mockResolvedValue({
+        label: 'SAFE',
+        toxicityScore: 0.01,
+        categories: [],
+        message: 'Noi dung an toan.',
+        highlights: [],
+        suggestion: '',
+        model: 'mask_partial_char',
+      }),
+      toVisibilityLevel: jest.fn().mockReturnValue('NORMAL'),
+    };
 
     service = new PostsService(
       prisma as unknown as PrismaService,
       uploadsService as unknown as UploadsService,
+      moderationService as unknown as ModerationService,
     );
   });
 
@@ -116,7 +150,15 @@ describe('PostsService', () => {
         authorId: author.id,
         content: 'Hello from posts.',
         mediaUrls: [],
-        moderationStatus: 'APPROVED',
+        moderationStatus: 'SAFE',
+        toxicityScore: 0.01,
+        moderationCategories: [],
+        moderationMessage: 'Noi dung an toan.',
+        moderationHighlights: [],
+        moderationSuggestion: '',
+        moderationModel: 'mask_partial_char',
+        visibilityLevel: 'NORMAL',
+        aiReviewedAt: expect.any(Date),
       },
       include: expect.any(Object),
     });
@@ -141,11 +183,29 @@ describe('PostsService', () => {
         content: post.content,
         mediaUrls: [],
         moderationStatus: 'approved',
+        visibilityLevel: 'normal',
+        toxicityScore: 0,
+        moderationCategories: [],
+        moderationMessage: null,
+        moderationHighlights: [],
+        moderationSuggestion: null,
+        moderationModel: 'mask_partial_char',
+        aiReviewedAt: createdAt,
         createdAt,
         author,
         likeCount: 3,
         replyCount: 2,
         isLikedByMe: false,
+      },
+      moderation: {
+        label: 'SAFE',
+        toxicityScore: 0.01,
+        categories: [],
+        message: 'Noi dung an toan.',
+        highlights: [],
+        suggestion: '',
+        model: 'mask_partial_char',
+        visibilityLevel: 'NORMAL',
       },
     });
   });
@@ -164,9 +224,6 @@ describe('PostsService', () => {
     expect(prisma.post.findMany).toHaveBeenCalledWith({
       where: {
         deletedAt: null,
-        moderationStatus: {
-          not: 'REJECTED',
-        },
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 21,
@@ -194,8 +251,7 @@ describe('PostsService', () => {
       include: expect.any(Object),
     });
     expect(result.post.isLikedByMe).toBe(true);
-    expect(result.post).not.toHaveProperty('moderationScore');
-    expect(result.post).not.toHaveProperty('moderationReason');
+    expect(result.post).toHaveProperty('visibilityLevel');
   });
 
   it('allows only the author to update a post', async () => {

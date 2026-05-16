@@ -22,6 +22,8 @@ describe('NotificationsService', () => {
   let prisma: MockPrismaService;
   let pushNotificationsService: {
     sendNotification: jest.Mock;
+    sendToToken: jest.Mock;
+    sendToTokens: jest.Mock;
   };
 
   const recipientId = '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
@@ -70,6 +72,8 @@ describe('NotificationsService', () => {
     };
     pushNotificationsService = {
       sendNotification: jest.fn(),
+      sendToToken: jest.fn(),
+      sendToTokens: jest.fn(),
     };
 
     service = new NotificationsService(

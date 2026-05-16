@@ -10,6 +10,7 @@ import {
 } from './types/post-response.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { ModerationService } from '../modules/moderation/moderation.service';
 
 interface PostRecord {
   id: string;
@@ -19,6 +20,14 @@ interface PostRecord {
   likeCount: number;
   replyCount: number;
   moderationStatus: string;
+  visibilityLevel: string;
+  toxicityScore: number | null;
+  moderationCategories: string[];
+  moderationMessage: string | null;
+  moderationHighlights: unknown;
+  moderationSuggestion: string | null;
+  moderationModel: string | null;
+  aiReviewedAt: Date | null;
   deletedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +62,7 @@ export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   async createPost(userId: string, dto: CreatePostDto): Promise<PostResponse> {
@@ -60,6 +70,9 @@ export class PostsService {
     const mediaUrls = dto.mediaUrls ?? [];
 
     this.assertPostHasContentOrMedia(content, mediaUrls);
+    const moderation = await this.moderationService.moderateText(content ?? '');
+    const visibilityLevel = this.moderationService.toVisibilityLevel(moderation.label);
+    const aiReviewedAt = new Date();
 
     const post = (await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
@@ -69,7 +82,15 @@ export class PostsService {
           authorId: userId,
           content,
           mediaUrls,
-          moderationStatus: 'APPROVED',
+          moderationStatus: moderation.label,
+          toxicityScore: moderation.toxicityScore,
+          moderationCategories: moderation.categories,
+          moderationMessage: moderation.message,
+          moderationHighlights: moderation.highlights,
+          moderationSuggestion: moderation.suggestion,
+          moderationModel: moderation.model,
+          visibilityLevel,
+          aiReviewedAt,
         },
         include: this.postInclude(userId),
       });
@@ -96,6 +117,16 @@ export class PostsService {
 
     return {
       post: this.toPostResponseItem(post),
+      moderation: {
+        label: moderation.label,
+        toxicityScore: moderation.toxicityScore,
+        categories: moderation.categories,
+        message: moderation.message,
+        highlights: moderation.highlights,
+        suggestion: moderation.suggestion,
+        model: moderation.model,
+        visibilityLevel,
+      },
     };
   }
 
@@ -104,9 +135,6 @@ export class PostsService {
     const posts = (await this.prisma.post.findMany({
       where: {
         deletedAt: null,
-        moderationStatus: {
-          not: 'REJECTED',
-        },
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -278,6 +306,14 @@ export class PostsService {
       content: post.content,
       mediaUrls: post.mediaUrls,
       moderationStatus: post.moderationStatus.toLowerCase(),
+      visibilityLevel: post.visibilityLevel.toLowerCase(),
+      toxicityScore: post.toxicityScore,
+      moderationCategories: post.moderationCategories,
+      moderationMessage: post.moderationMessage,
+      moderationHighlights: post.moderationHighlights,
+      moderationSuggestion: post.moderationSuggestion,
+      moderationModel: post.moderationModel,
+      aiReviewedAt: post.aiReviewedAt,
       createdAt: post.createdAt,
       author: post.author,
       likeCount: post.likeCount,

@@ -1,20 +1,30 @@
 import {
   BadGatewayException,
+  HttpException,
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UploadImageDto } from './dto/upload-image.dto';
+import { UploadVideoDto } from './dto/upload-video.dto';
 import { IMAGE_STORAGE_PROVIDER } from './providers/image-storage.provider';
 import type { ImageStorageProvider } from './providers/image-storage.provider';
-import { UploadImageResponse, UploadImageType } from './types/upload-response.type';
+import {
+  UploadImageResponse,
+  UploadImageType,
+  UploadVideoResponse,
+} from './types/upload-response.type';
 import { PrismaService } from '../prisma/prisma.service';
 
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedUploadTypes = new Set<UploadImageType>(['post', 'reply', 'profile_avatar']);
 const defaultMaxImageSizeBytes = 5 * 1024 * 1024;
+const allowedVideoMimeTypes = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+const defaultMaxVideoSizeBytes = 25 * 1024 * 1024;
+const maxPostVideoDurationSeconds = 10;
 const defaultPendingUploadTtlHours = 24;
 
 export type UploadAttachmentType = 'post' | 'reply' | 'profile_avatar';
@@ -40,6 +50,8 @@ interface MarkOldPendingUploadsOrphanedInput {
 
 @Injectable()
 export class UploadsService {
+  private readonly logger = new Logger(UploadsService.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
@@ -85,15 +97,63 @@ export class UploadsService {
       });
 
       return {
-        upload: {
-          id: upload.id,
-          secureUrl: upload.secureUrl,
-          publicId: upload.publicId,
-          type: upload.type as UploadImageType,
-        },
+        url: upload.secureUrl,
+        publicId: upload.publicId,
       };
     } catch (error) {
-      if (error instanceof BadGatewayException) {
+      this.logger.error('Image upload failed', this.toErrorLogContext(error, userId, type));
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw this.providerFailedException();
+    }
+  }
+
+  async uploadPostVideo(
+    userId: string,
+    file: Express.Multer.File | undefined,
+    _dto: UploadVideoDto,
+  ): Promise<UploadVideoResponse> {
+    this.validateVideoFile(file);
+
+    try {
+      const storedVideo = await this.storageProvider.uploadVideo({
+        userId,
+        file,
+        maxDurationSeconds: maxPostVideoDurationSeconds,
+      });
+
+      if (!this.isValidProviderResponse(storedVideo.secureUrl, storedVideo.publicId)) {
+        throw this.providerFailedException();
+      }
+
+      const upload = await this.prisma.upload.create({
+        data: {
+          ownerId: userId,
+          secureUrl: storedVideo.secureUrl,
+          publicId: storedVideo.publicId,
+          type: 'post',
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          originalName: file.originalname || null,
+        },
+        select: {
+          secureUrl: true,
+          publicId: true,
+        },
+      });
+
+      return {
+        url: upload.secureUrl,
+        publicId: upload.publicId,
+        durationSeconds: storedVideo.durationSeconds,
+      };
+    } catch (error) {
+      this.logger.error('Video upload failed', this.toErrorLogContext(error, userId, 'post'));
+
+      if (error instanceof HttpException) {
         throw error;
       }
 
@@ -234,6 +294,48 @@ export class UploadsService {
       code: 'UPLOAD_PROVIDER_FAILED',
       message: 'Image upload failed. Please try again.',
     });
+  }
+
+  private validateVideoFile(
+    file: Express.Multer.File | undefined,
+  ): asserts file is Express.Multer.File {
+    if (!file || file.size <= 0 || file.buffer.length === 0) {
+      throw new BadRequestException({
+        code: 'UPLOAD_FILE_REQUIRED',
+        message: 'Video file is required.',
+      });
+    }
+
+    const maxVideoSizeBytes = this.configService.get<number>(
+      'UPLOAD_MAX_VIDEO_SIZE_BYTES',
+      defaultMaxVideoSizeBytes,
+    );
+
+    if (file.size > maxVideoSizeBytes) {
+      throw new PayloadTooLargeException({
+        code: 'UPLOAD_FILE_TOO_LARGE',
+        message: 'Video size exceeds allowed limit.',
+      });
+    }
+
+    if (!allowedVideoMimeTypes.has(file.mimetype)) {
+      throw new BadRequestException({
+        code: 'UPLOAD_INVALID_MIME_TYPE',
+        message: 'Only MP4, MOV, and WEBM videos are allowed.',
+      });
+    }
+  }
+
+  private toErrorLogContext(error: unknown, userId: string, type: UploadImageType): string {
+    const details = {
+      userId,
+      type,
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    };
+
+    return JSON.stringify(details);
   }
 
   private uniqueSecureUrls(secureUrls: string[]): string[] {

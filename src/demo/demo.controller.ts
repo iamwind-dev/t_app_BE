@@ -8,4 +8,9 @@ export class DemoController {
   index(@Res() response: Response): void {
     response.sendFile(join(process.cwd(), 'public', 'demo', 'index.html'));
   }
+
+  @Get('fcm')
+  fcmDemo(@Res() response: Response): void {
+    response.sendFile(join(process.cwd(), 'public', 'demo', 'fcm.html'));
+  }
 }

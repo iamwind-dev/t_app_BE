@@ -3,6 +3,14 @@ export interface PostResponseItem {
   content: string | null;
   mediaUrls: string[];
   moderationStatus: string;
+  visibilityLevel: string;
+  toxicityScore: number | null;
+  moderationCategories: string[];
+  moderationMessage: string | null;
+  moderationHighlights: unknown;
+  moderationSuggestion: string | null;
+  moderationModel: string | null;
+  aiReviewedAt: Date | null;
   createdAt: Date;
   author: {
     id: string;
@@ -17,6 +25,16 @@ export interface PostResponseItem {
 
 export interface PostResponse {
   post: PostResponseItem;
+  moderation?: {
+    label: string;
+    toxicityScore: number;
+    categories: string[];
+    message: string;
+    highlights: unknown[];
+    suggestion: string;
+    model: string;
+    visibilityLevel: string;
+  };
 }
 
 export interface FeedResponse {

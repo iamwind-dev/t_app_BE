@@ -1,0 +1,291 @@
+:root {
+  --bg: #000;
+  --card: #111;
+  --border: #2f3336;
+  --text: #f5f5f5;
+  --muted: #8b8f98;
+  --safe: #22c55e;
+  --warning: #facc15;
+  --danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 24px 16px 48px;
+}
+
+.container {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.header p {
+  margin: 8px 0 20px;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+}
+
+.composer {
+  display: grid;
+  gap: 12px;
+}
+
+.composer textarea,
+#root textarea,
+input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: #0b0b0b;
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.composer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.chip {
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid currentColor;
+}
+
+.chip-safe {
+  color: var(--safe);
+}
+
+.chip-warning {
+  color: var(--warning);
+}
+
+.chip-restricted {
+  color: var(--danger);
+}
+
+.meter-wrap {
+  display: grid;
+  gap: 6px;
+}
+
+.meter-label {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.meter-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #202225;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--safe) 0%, var(--warning) 60%, var(--danger) 100%);
+}
+
+.sub-card {
+  background: #0e0e0e;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.sub-title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.preview-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+mark {
+  background: rgba(250, 204, 21, 0.2);
+  color: #fde68a;
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
+.suggestion-card {
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.suggestion-label {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.primary-btn,
+.ghost-btn,
+.danger-btn,
+.link-btn {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primary-btn {
+  background: #f5f5f5;
+  color: #111;
+}
+
+.ghost-btn {
+  background: transparent;
+  color: var(--text);
+}
+
+.danger-btn {
+  background: #2b1111;
+  border-color: #4c1d1d;
+  color: #fca5a5;
+}
+
+.feed {
+  margin-top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.feed h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.feed-post {
+  display: grid;
+  gap: 10px;
+}
+
+.feed-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feed-content {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.empty-feed {
+  color: var(--muted);
+}
+
+.blurred-content-wrap {
+  position: relative;
+}
+
+.real-content {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.real-content.is-blurred {
+  filter: blur(4px);
+}
+
+.blur-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.05) 0%,
+    rgba(0, 0, 0, 0.25) 100%
+  );
+  pointer-events: none;
+}
+
+.blur-warning {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.link-btn {
+  margin-top: 8px;
+  background: transparent;
+  color: #93c5fd;
+  border-color: #1e3a8a;
+}
+
+.small-warning {
+  color: var(--warning);
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.modal-card {
+  width: min(520px, 100%);
+  background: #121212;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.modal-card h3 {
+  margin: 0 0 8px;
+}
+
+.modal-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.modal-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

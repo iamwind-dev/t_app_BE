@@ -11,9 +11,14 @@ interface EnvironmentVariables {
   UPLOAD_LOCAL_DIR: string;
   UPLOAD_PUBLIC_BASE_URL: string;
   UPLOAD_MAX_IMAGE_SIZE_BYTES: number;
+  UPLOAD_MAX_VIDEO_SIZE_BYTES: number;
   CLOUDINARY_CLOUD_NAME?: string;
   CLOUDINARY_API_KEY?: string;
   CLOUDINARY_API_SECRET?: string;
+  CLOUDINARY_UPLOAD_FOLDER: string;
+  UPLOAD_PENDING_TTL_HOURS: number;
+  AI_MODERATION_BASE_URL: string;
+  AI_MODERATION_TIMEOUT_MS: number;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
@@ -31,6 +36,31 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
     uploadMaxImageSizeBytes > 20 * 1024 * 1024
   ) {
     throw new Error('UPLOAD_MAX_IMAGE_SIZE_BYTES must be an integer between 1 and 20971520.');
+  }
+
+  const uploadMaxVideoSizeBytes = Number(config.UPLOAD_MAX_VIDEO_SIZE_BYTES ?? 25 * 1024 * 1024);
+
+  if (
+    !Number.isInteger(uploadMaxVideoSizeBytes) ||
+    uploadMaxVideoSizeBytes < 1 ||
+    uploadMaxVideoSizeBytes > 200 * 1024 * 1024
+  ) {
+    throw new Error('UPLOAD_MAX_VIDEO_SIZE_BYTES must be an integer between 1 and 209715200.');
+  }
+
+  const uploadPendingTtlHours = Number(config.UPLOAD_PENDING_TTL_HOURS ?? 24);
+
+  if (
+    !Number.isInteger(uploadPendingTtlHours) ||
+    uploadPendingTtlHours < 1 ||
+    uploadPendingTtlHours > 24 * 30
+  ) {
+    throw new Error('UPLOAD_PENDING_TTL_HOURS must be an integer between 1 and 720.');
+  }
+
+  const aiModerationTimeoutMs = Number(config.AI_MODERATION_TIMEOUT_MS ?? 5000);
+  if (!Number.isInteger(aiModerationTimeoutMs) || aiModerationTimeoutMs < 100 || aiModerationTimeoutMs > 60000) {
+    throw new Error('AI_MODERATION_TIMEOUT_MS must be an integer between 100 and 60000.');
   }
 
   return {
@@ -55,6 +85,7 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
       'https://localhost:3000/uploads',
     ),
     UPLOAD_MAX_IMAGE_SIZE_BYTES: uploadMaxImageSizeBytes,
+    UPLOAD_MAX_VIDEO_SIZE_BYTES: uploadMaxVideoSizeBytes,
     CLOUDINARY_CLOUD_NAME:
       typeof config.CLOUDINARY_CLOUD_NAME === 'string' && config.CLOUDINARY_CLOUD_NAME.length > 0
         ? config.CLOUDINARY_CLOUD_NAME
@@ -67,6 +98,10 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
       typeof config.CLOUDINARY_API_SECRET === 'string' && config.CLOUDINARY_API_SECRET.length > 0
         ? config.CLOUDINARY_API_SECRET
         : undefined,
+    CLOUDINARY_UPLOAD_FOLDER: getString(config.CLOUDINARY_UPLOAD_FOLDER, 'threads-like'),
+    UPLOAD_PENDING_TTL_HOURS: uploadPendingTtlHours,
+    AI_MODERATION_BASE_URL: getString(config.AI_MODERATION_BASE_URL, 'http://localhost:8000'),
+    AI_MODERATION_TIMEOUT_MS: aiModerationTimeoutMs,
   };
 }
 

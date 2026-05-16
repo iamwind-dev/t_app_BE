@@ -179,13 +179,48 @@
               </label>
               <label>Image <input name="file" type="file" accept="image/jpeg,image/png,image/webp" required /></label>
               <button type="submit">POST /uploads/image</button>
-              <p class="hint">Returned URL can be pasted into post media URLs or avatar URL.</p>
+              <p class="hint">Returned `url` can be pasted into post media URLs or avatar URL.</p>
+            </form>
+            <form class="panel" data-action="upload-video">
+              <h3>Upload Post Video (<= 10s)</h3>
+              <label>Video <input name="file" type="file" accept="video/mp4,video/quicktime,video/webm" required /></label>
+              <button type="submit">POST /uploads/video</button>
+              <p class="hint">Returned `url` can be pasted into post media URLs.</p>
             </form>
           </div>
         </section>
 
         <section class="section" id="section-notifications" data-section="notifications">
           <div class="section-grid">
+            <form class="panel" data-action="register-device-token-manual">
+              <h3>Register Device Token (Manual)</h3>
+              <label>FCM Token <textarea name="token" rows="4" placeholder="FCM_WEB_TOKEN_DEMO" required></textarea></label>
+              <label>Platform
+                <select name="platform">
+                  <option value="web">web</option>
+                  <option value="android">android</option>
+                  <option value="ios">ios</option>
+                </select>
+              </label>
+              <label>User ID (optional) <input name="userId" data-fill="userId" placeholder="UUID" /></label>
+              <button type="submit">POST /devices/token</button>
+            </form>
+            <form class="panel" data-action="test-push-token">
+              <h3>Test Push To One Token</h3>
+              <label>FCM Token <textarea name="token" rows="4" placeholder="FCM_WEB_TOKEN_DEMO" required></textarea></label>
+              <label>Title <input name="title" value="Test notification" required /></label>
+              <label>Body <input name="body" value="Hello from NestJS backend" required /></label>
+              <label>Data JSON <textarea name="dataJson" rows="3" placeholder='{"type":"SYSTEM","screen":"demo"}'></textarea></label>
+              <button type="submit">POST /notifications/test</button>
+            </form>
+            <form class="panel" data-action="test-push-user">
+              <h3>Test Push To User Tokens</h3>
+              <label>User ID <input name="userId" data-fill="userId" placeholder="UUID" required /></label>
+              <label>Title <input name="title" value="Co thong bao moi" required /></label>
+              <label>Body <input name="body" value="Ban co noi dung moi" required /></label>
+              <label>Data JSON <textarea name="dataJson" rows="3" placeholder='{"type":"NEW_POST","postId":"demo-post-id"}'></textarea></label>
+              <button type="submit">POST /notifications/test/user/:userId</button>
+            </form>
             <form class="panel" data-action="notifications">
               <h3>List Notifications</h3>
               <label>Limit <input name="limit" type="number" min="1" max="50" value="20" /></label>
