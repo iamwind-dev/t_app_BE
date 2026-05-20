@@ -36,7 +36,7 @@ export class UpdateProfileDto {
   @Transform(({ value }) => trimNullableStringInput(value as unknown))
   @ValidateIf((_object, value: unknown) => value !== null && value !== undefined)
   @IsString()
-  @IsUrl({}, { message: 'Avatar URL must be valid.' })
+  @IsUrl({ require_tld: false }, { message: 'Avatar URL must be valid.' })
   @MaxLength(2048)
   avatarUrl?: string | null;
 }

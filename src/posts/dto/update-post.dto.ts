@@ -11,7 +11,7 @@ export class UpdatePostDto {
   @IsOptional()
   @IsArray({ message: 'mediaUrls must be an array.' })
   @ArrayMaxSize(10, { message: 'A post can include at most 10 media items.' })
-  @IsUrl({}, { each: true, message: 'Each media URL must be valid.' })
+  @IsUrl({ require_tld: false }, { each: true, message: 'Each media URL must be valid.' })
   mediaUrls?: string[];
 }
 

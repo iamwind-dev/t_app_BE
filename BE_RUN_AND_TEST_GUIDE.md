@@ -64,6 +64,14 @@ npm.cmd run prisma:generate
 npm.cmd run prisma:migrate:dev
 ```
 
+Neu `DATABASE_URL` dang tro toi Supabase/remote Postgres, nen apply migration bang deploy thay vi migrate dev:
+
+```cmd
+npx.cmd prisma migrate deploy --schema prisma/schema.prisma
+```
+
+Sau khi migrate/generate, restart BE de app dung Prisma Client/schema moi.
+
 ### 1.4 Start BE
 
 ```cmd
@@ -126,9 +134,9 @@ curl -s -X POST %BASE%/auth/login -H "Content-Type: application/json" -d "{\"ide
 Copy `accessToken`, `refreshToken`, `user.id` tu response va set:
 
 ```cmd
-set A_TOKEN=PASTE_ACCESS_TOKEN_A
-set A_REFRESH=PASTE_REFRESH_TOKEN_A
-set A_ID=PASTE_USER_ID_A
+set A_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4MWMxZDA5Mi0xNTg0LTRkYjEtOTYwYS1hZGYzNWRiNGY0ZmYiLCJpYXQiOjE3Nzg0MDAxMjIsImV4cCI6MTc3ODQwMzcyMn0.JM93RQI6XqlsD9nkwt2spN4kvTL13ye1KkOx9qLnHfg
+set A_REFRESH=n9vww9YUNUhii9qC59ZnBPqP1P7EjwUR5wQG2gLHy4DQkQpSTE35Ld2HfXTjddyp
+set A_ID=81c1d092-1584-4db1-960a-adf35db4f4ff
 ```
 
 Tao/login user B:
@@ -141,9 +149,9 @@ curl -s -X POST %BASE%/auth/login -H "Content-Type: application/json" -d "{\"ide
 Copy token/id cua B:
 
 ```cmd
-set B_TOKEN=PASTE_ACCESS_TOKEN_B
-set B_REFRESH=PASTE_REFRESH_TOKEN_B
-set B_ID=PASTE_USER_ID_B
+set B_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiODY5ODJjYy05YjQ1LTQ3OWMtOTZhNy0xMWI1ODRjNGJhOTkiLCJpYXQiOjE3Nzg0MDAxOTUsImV4cCI6MTc3ODQwMzc5NX0.w3S-sZpIJo7wDLb1rrw9nbC85hmXHM4RbzhRpTbB1oA
+set B_REFRESH=I0opAkw6s5WtOrLxOLxHdpXJddLNAqoUEcvbuBJGCvlD9Tz0vMMDR5CwD2wwyokC
+set B_ID=Pb86982cc-9b45-479c-96a7-11b584c4ba99
 ```
 
 Neu user da ton tai thi bo qua register va chi login.
@@ -227,7 +235,7 @@ curl -i -X PATCH %BASE%/users/me -H "Authorization: Bearer %A_TOKEN%" -H "Conten
 Doi duong dan file anh cho dung may cua ban:
 
 ```cmd
-curl -i -X POST %BASE%/uploads/image -H "Authorization: Bearer %A_TOKEN%" -F "type=post" -F "file=@C:\Users\hiep1\OneDrive\Desktop\test.jpg"
+curl -i -X POST %BASE%/uploads/image -H "Authorization: Bearer %A_TOKEN%" -F "type=post" -F "file=@C:\Users\hiep1\OneDrive\Pictures\Máy ảnh\IMG_6817.JPG"
 ```
 
 Ky vong: `201`, tra:
@@ -260,7 +268,7 @@ curl -i -X POST %BASE%/posts -H "Authorization: Bearer %A_TOKEN%" -H "Content-Ty
 Copy `post.id`:
 
 ```cmd
-set POST_ID=PASTE_POST_ID
+set POST_ID=1a881366-b509-4394-8f14-0e3515666de7
 ```
 
 ### Create Post With Media
@@ -310,7 +318,7 @@ curl -i -X POST %BASE%/posts/%POST_ID%/replies -H "Authorization: Bearer %B_TOKE
 Copy `reply.id`:
 
 ```cmd
-set REPLY_ID=PASTE_REPLY_ID
+set REPLY_ID=ec522ccd-bd53-4630-940c-e01c394ba1f7
 ```
 
 ### List Post Replies
@@ -430,7 +438,7 @@ curl -i "%BASE%/notifications?limit=20&unreadOnly=true" -H "Authorization: Beare
 Copy `notification.id`:
 
 ```cmd
-set NOTIFICATION_ID=PASTE_NOTIFICATION_ID
+set NOTIFICATION_ID=23e489f0-d43a-46a4-ba2e-f11b8322f688
 ```
 
 ### Mark One As Read
@@ -458,7 +466,7 @@ curl -i -X POST %BASE%/conversations/direct/%B_ID% -H "Authorization: Bearer %A_
 Copy `conversation.id`:
 
 ```cmd
-set CONVERSATION_ID=PASTE_CONVERSATION_ID
+set CONVERSATION_ID=16affc8d-d027-4e17-b603-636ae3e13c5f
 ```
 
 ### List Conversations
@@ -476,7 +484,7 @@ curl -i -X POST %BASE%/conversations/%CONVERSATION_ID%/messages -H "Authorizatio
 Copy `message.id`:
 
 ```cmd
-set MESSAGE_ID=PASTE_MESSAGE_ID
+set MESSAGE_ID=4c603fa0-2dca-44d3-9ae7-6d11b5787e50
 ```
 
 ### Get Messages
