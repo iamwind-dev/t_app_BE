@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RegisterDeviceTokenDto, RevokeDeviceTokenDto } from './dto/device-token.dto';
+import { RegisterDeviceTokenManualDto } from './dto/register-device-token.dto';
 import {
   DeviceTokenListResponse,
   DeviceTokenResponse,
@@ -51,6 +52,40 @@ export class DevicesService {
       platform: dto.platform.trim(),
       deviceId: this.optionalString(dto.deviceId),
       appVersion: this.optionalString(dto.appVersion),
+      lastUsedAt: now,
+      revokedAt: null,
+    };
+
+    const deviceToken = existingToken
+      ? ((await this.prisma.deviceToken.update({
+          where: { id: existingToken.id },
+          data,
+          select: deviceTokenSelect,
+        })) as DeviceTokenRecord)
+      : ((await this.prisma.deviceToken.create({
+          data,
+          select: deviceTokenSelect,
+        })) as DeviceTokenRecord);
+
+    return {
+      deviceToken: this.toResponseItem(deviceToken),
+    };
+  }
+
+  async registerTokenManual(dto: RegisterDeviceTokenManualDto): Promise<DeviceTokenResponse> {
+    const token = dto.token.trim();
+    const now = new Date();
+    const existingToken = await this.prisma.deviceToken.findUnique({
+      where: { token },
+      select: { id: true },
+    });
+
+    const data = {
+      userId: this.optionalString(dto.userId),
+      token,
+      platform: dto.platform.trim(),
+      deviceId: null,
+      appVersion: null,
       lastUsedAt: now,
       revokedAt: null,
     };

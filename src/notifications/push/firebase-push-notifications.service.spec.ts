@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getMessaging } from 'firebase-admin/messaging';
@@ -168,23 +169,23 @@ describe('FirebasePushNotificationsService', () => {
     });
   });
 
-  it('is a no-op when Firebase credentials are not configured', async () => {
+  it('throws a clear error when Firebase credentials are not configured', async () => {
     const service = new FirebasePushNotificationsService(
       { get: jest.fn() } as unknown as ConfigService,
       prisma as unknown as PrismaService,
     );
 
-    await service.sendNotification({
-      id: 'notification-id',
-      type: 'FOLLOW',
-      recipientId: 'recipient-id',
-      title: 'New notification',
-      body: 'Alice followed you.',
-      targetType: 'USER',
-      targetId: 'actor-id',
-      metadata: {},
-    });
-
-    expect(prisma.deviceToken.findMany).not.toHaveBeenCalled();
+    await expect(
+      service.sendNotification({
+        id: 'notification-id',
+        type: 'FOLLOW',
+        recipientId: 'recipient-id',
+        title: 'New notification',
+        body: 'Alice followed you.',
+        targetType: 'USER',
+        targetId: 'actor-id',
+        metadata: {},
+      }),
+    ).rejects.toThrow(ServiceUnavailableException);
   });
 });

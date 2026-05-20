@@ -1,5 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { TestPushTokenDto } from './dto/test-push-token.dto';
+import { TestPushUserDto } from './dto/test-push-user.dto';
 import { NotificationsQueryDto } from './dto/notifications-query.dto';
 import {
   CreateFollowNotificationInput,
@@ -14,6 +21,10 @@ import {
 } from './types/notification-response.type';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushNotificationsService } from './push/push-notifications.service';
+import {
+  PushNotificationPayloadType,
+  PushToUserResult,
+} from './types/push-notification-payload.type';
 
 interface NotificationRecord {
   id: string;
@@ -210,6 +221,82 @@ export class NotificationsService {
     });
   }
 
+  async sendTestPushToToken(dto: TestPushTokenDto): Promise<{ sent: true }> {
+    const payload = this.toPushPayload(dto.title, dto.body, dto.data);
+
+    try {
+      await this.pushNotificationsService.sendToToken({
+        token: dto.token.trim(),
+        title: payload.title,
+        body: payload.body,
+        data: payload.data,
+      });
+      return { sent: true };
+    } catch (error) {
+      throw this.mapPushError(error);
+    }
+  }
+
+  async sendTestPushToUser(userId: string, dto: TestPushUserDto): Promise<PushToUserResult> {
+    const payload = this.toPushPayload(dto.title, dto.body, dto.data);
+    const tokens = await this.prisma.deviceToken.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      select: {
+        token: true,
+      },
+    });
+    const tokenValues = tokens.map((item) => item.token);
+
+    if (tokenValues.length === 0) {
+      return {
+        requestedCount: 0,
+        successCount: 0,
+        failureCount: 0,
+        invalidTokens: [],
+      };
+    }
+
+    const result = await this.pushNotificationsService.sendToTokens({
+      tokens: tokenValues,
+      title: payload.title,
+      body: payload.body,
+      data: payload.data,
+    });
+
+    if (result.invalidTokens.length > 0) {
+      await this.prisma.deviceToken.deleteMany({
+        where: {
+          token: {
+            in: result.invalidTokens,
+          },
+        },
+      });
+    }
+
+    await this.prisma.notification.create({
+      data: {
+        type: 'SYSTEM',
+        recipientId: userId,
+        message: payload.body,
+        targetType: 'USER',
+        targetId: userId,
+        sourceType: 'PUSH_TEST',
+        sourceId: `PUSH_TEST:${Date.now()}`,
+        metadata: this.toPrismaJson(payload.data),
+      },
+    });
+
+    return {
+      requestedCount: tokenValues.length,
+      successCount: result.successCount,
+      failureCount: result.failureCount,
+      invalidTokens: result.invalidTokens,
+    };
+  }
+
   private async createEventNotification(input: {
     type: 'LIKE' | 'REPLY' | 'FOLLOW' | 'MESSAGE';
     actorId: string;
@@ -341,5 +428,57 @@ export class NotificationsService {
         )
         .map(([key, metadataValue]) => [key, String(metadataValue)]),
     );
+  }
+
+  private toPushPayload(
+    title: string,
+    body: string,
+    data: Record<string, string | number | boolean> | undefined,
+  ): PushNotificationPayloadType {
+    return {
+      title: title.trim(),
+      body: body.trim(),
+      data: this.toPushMetadata(data),
+    };
+  }
+
+  private mapPushError(error: unknown): BadRequestException | InternalServerErrorException {
+    const code =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : '';
+
+    if (
+      code === 'messaging/invalid-registration-token' ||
+      code === 'messaging/registration-token-not-registered' ||
+      code === 'messaging/invalid-argument'
+    ) {
+      return new BadRequestException({
+        code: 'FCM_TOKEN_INVALID',
+        message: 'FCM token is invalid or not registered.',
+      });
+    }
+
+    if (code === 'messaging/mismatched-credential') {
+      return new BadRequestException({
+        code: 'FCM_SENDER_ID_MISMATCH',
+        message: 'Sender ID mismatch between token and Firebase project.',
+      });
+    }
+
+    if (code === 'messaging/authentication-error') {
+      return new BadRequestException({
+        code: 'FCM_PERMISSION_DENIED',
+        message: 'Firebase credentials are invalid or missing permission.',
+      });
+    }
+
+    return new InternalServerErrorException({
+      code: 'FCM_SEND_FAILED',
+      message: 'Failed to send push notification.',
+    });
   }
 }

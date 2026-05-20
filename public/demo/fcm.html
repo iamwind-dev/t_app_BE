@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FCM Web Token Demo</title>
+    <link rel="stylesheet" href="/demo-assets/styles.css" />
+    <script type="module" src="/demo-assets/fcm-demo.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell" style="grid-template-columns: 1fr">
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Firebase Admin SDK Test Setup</p>
+            <h2>FCM Web Token Demo</h2>
+          </div>
+          <a class="docs-link" href="/demo" rel="noreferrer">Back to Demo</a>
+        </header>
+
+        <section class="section is-active">
+          <div class="section-grid">
+            <form class="panel" id="fcmForm">
+              <h3>Firebase Client Config</h3>
+              <label>apiKey <input name="apiKey" required /></label>
+              <label>authDomain <input name="authDomain" required /></label>
+              <label>projectId <input name="projectId" required /></label>
+              <label>storageBucket <input name="storageBucket" required /></label>
+              <label>messagingSenderId <input name="messagingSenderId" required /></label>
+              <label>appId <input name="appId" required /></label>
+              <label>VAPID Key <input name="vapidKey" required /></label>
+              <div class="button-row">
+                <button type="submit">Get FCM Token</button>
+                <button type="button" class="secondary" id="copyToken">Copy Token</button>
+              </div>
+              <p class="hint">
+                Ensure this page runs on <code>localhost</code> or HTTPS and browser notification
+                permission is allowed.
+              </p>
+            </form>
+
+            <article class="panel">
+              <h3>Output</h3>
+              <p id="statusText" class="status-text">Idle.</p>
+              <textarea id="tokenOutput" rows="14" spellcheck="false" placeholder="FCM token will appear here"></textarea>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

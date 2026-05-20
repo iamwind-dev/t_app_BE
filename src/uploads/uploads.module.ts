@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from '../prisma/prisma.module';
+import { CloudinaryProvider } from './cloudinary.provider';
 import { IMAGE_STORAGE_PROVIDER } from './providers/image-storage.provider';
-import { LocalImageStorageProvider } from './providers/local-image-storage.provider';
 import { UploadsController } from './uploads.controller';
 import { UploadsService } from './uploads.service';
 
@@ -13,7 +13,7 @@ import { UploadsService } from './uploads.service';
     UploadsService,
     {
       provide: IMAGE_STORAGE_PROVIDER,
-      useClass: LocalImageStorageProvider,
+      useClass: CloudinaryProvider,
     },
   ],
   exports: [UploadsService],

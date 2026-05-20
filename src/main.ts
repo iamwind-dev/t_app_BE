@@ -26,6 +26,8 @@ async function bootstrap(): Promise<void> {
     prefix: '/demo-assets/',
   });
 
+  app.useStaticAssets(join(process.cwd(), 'public'));
+
   app.useStaticAssets(join(process.cwd(), 'node_modules', 'socket.io', 'client-dist'), {
     prefix: '/socket.io-client/',
   });

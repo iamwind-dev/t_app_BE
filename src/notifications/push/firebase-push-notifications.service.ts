@@ -1,10 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { cert, getApps, initializeApp, type ServiceAccount } from 'firebase-admin/app';
 import type { BatchResponse, Messaging } from 'firebase-admin/messaging';
 import { getMessaging } from 'firebase-admin/messaging';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  DirectPushPayload,
+  MulticastPushPayload,
+  MulticastPushResult,
   PushNotificationPayload,
   PushNotificationsService,
 } from './push-notifications.service';
@@ -17,6 +20,7 @@ const invalidTokenErrorCodes = new Set([
 
 @Injectable()
 export class FirebasePushNotificationsService implements PushNotificationsService {
+  private readonly logger = new Logger(FirebasePushNotificationsService.name);
   private readonly firebaseMessaging: Messaging | null;
 
   constructor(
@@ -27,9 +31,7 @@ export class FirebasePushNotificationsService implements PushNotificationsServic
   }
 
   async sendNotification(payload: PushNotificationPayload): Promise<void> {
-    if (!this.firebaseMessaging) {
-      return;
-    }
+    const messaging = this.ensureMessagingClient();
 
     const deviceTokens = await this.prisma.deviceToken.findMany({
       where: {
@@ -46,7 +48,7 @@ export class FirebasePushNotificationsService implements PushNotificationsServic
       return;
     }
 
-    const response = await this.firebaseMessaging.sendEachForMulticast({
+    const response = await messaging.sendEachForMulticast({
       tokens,
       notification: {
         title: payload.title,
@@ -72,6 +74,74 @@ export class FirebasePushNotificationsService implements PushNotificationsServic
     });
 
     await this.revokeInvalidTokens(tokens, response);
+  }
+
+  async sendToToken(payload: DirectPushPayload): Promise<void> {
+    const messaging = this.ensureMessagingClient();
+
+    try {
+      await messaging.send({
+        token: payload.token,
+        notification: {
+          title: payload.title,
+          body: payload.body,
+        },
+        data: payload.data,
+        webpush: {
+          notification: {
+            title: payload.title,
+            body: payload.body,
+            icon: '/icons/Icon-192.png',
+          },
+        },
+      });
+    } catch (error) {
+      const messagingError = this.toMessagingError(error);
+      if (messagingError && invalidTokenErrorCodes.has(messagingError.code)) {
+        await this.prisma.deviceToken.deleteMany({
+          where: {
+            token: payload.token,
+          },
+        });
+      }
+
+      throw error;
+    }
+  }
+
+  async sendToTokens(payload: MulticastPushPayload): Promise<MulticastPushResult> {
+    const messaging = this.ensureMessagingClient();
+    if (payload.tokens.length === 0) {
+      return {
+        successCount: 0,
+        failureCount: 0,
+        invalidTokens: [],
+      };
+    }
+
+    const response = await messaging.sendEachForMulticast({
+      tokens: payload.tokens,
+      notification: {
+        title: payload.title,
+        body: payload.body,
+      },
+      data: payload.data,
+      webpush: {
+        notification: {
+          title: payload.title,
+          body: payload.body,
+          icon: '/icons/Icon-192.png',
+        },
+      },
+    });
+
+    const invalidTokens = this.collectInvalidTokens(payload.tokens, response);
+
+    return {
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+      invalidTokens,
+    };
   }
 
   private createMessagingClient(): Messaging | null {
@@ -117,12 +187,7 @@ export class FirebasePushNotificationsService implements PushNotificationsServic
   }
 
   private async revokeInvalidTokens(tokens: string[], response: BatchResponse): Promise<void> {
-    const invalidTokens = response.responses
-      .map((item, index) => {
-        const code = item.error?.code;
-        return code && invalidTokenErrorCodes.has(code) ? tokens[index] : null;
-      })
-      .filter((token): token is string => Boolean(token));
+    const invalidTokens = this.collectInvalidTokens(tokens, response);
 
     if (invalidTokens.length === 0) {
       return;
@@ -139,5 +204,41 @@ export class FirebasePushNotificationsService implements PushNotificationsServic
         revokedAt: new Date(),
       },
     });
+  }
+
+  private collectInvalidTokens(tokens: string[], response: BatchResponse): string[] {
+    return response.responses
+      .map((item, index) => {
+        const code = item.error?.code;
+        return code && invalidTokenErrorCodes.has(code) ? tokens[index] : null;
+      })
+      .filter((token): token is string => Boolean(token));
+  }
+
+  private ensureMessagingClient(): Messaging {
+    if (this.firebaseMessaging) {
+      return this.firebaseMessaging;
+    }
+
+    this.logger.error(
+      'Firebase messaging client is not configured. Missing FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY.',
+    );
+    throw new ServiceUnavailableException({
+      code: 'PUSH_PROVIDER_NOT_CONFIGURED',
+      message: 'Firebase push provider is not configured.',
+    });
+  }
+
+  private toMessagingError(error: unknown): { code: string } | null {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+    ) {
+      return error as { code: string };
+    }
+
+    return null;
   }
 }

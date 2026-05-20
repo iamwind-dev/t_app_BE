@@ -93,6 +93,10 @@
       if (action === 'like-reply') return request('POST', '/replies/' + encode(formValue(form, 'replyId')) + '/like', null, { requireToken: true });
       if (action === 'unlike-reply') return request('DELETE', '/replies/' + encode(formValue(form, 'replyId')) + '/like', null, { requireToken: true });
       if (action === 'upload-image') return uploadImage(form);
+      if (action === 'upload-video') return uploadVideo(form);
+      if (action === 'register-device-token-manual') return registerDeviceTokenManual(form);
+      if (action === 'test-push-token') return testPushToken(form);
+      if (action === 'test-push-user') return testPushUser(form);
       if (action === 'notifications') return notifications(form);
       if (action === 'mark-notification-read') return request('PATCH', '/notifications/' + encode(formValue(form, 'id')) + '/read', null, { requireToken: true });
       if (action === 'mark-all-notifications-read') return request('PATCH', '/notifications/read-all', null, { requireToken: true });
@@ -191,14 +195,44 @@
     }
 
     var payload = await requestFormData('/uploads/image', formData);
-    var url = findFirst(payload, ['secureUrl']);
+    var url = findFirst(payload, ['url']) || findFirst(payload, ['secureUrl']);
+    var publicId = findFirst(payload, ['publicId']);
     if (url) {
       renderResult('Upload saved', {
-        note: 'Copy secureUrl into mediaUrls or avatarUrl.',
-        secureUrl: url,
+        note: 'Copy url into mediaUrls or avatarUrl.',
+        url: url,
+        publicId: publicId || null,
         response: payload,
       });
+      return;
     }
+
+    renderResult('Upload response received', payload);
+  }
+
+  async function uploadVideo(form) {
+    ensureToken();
+    var formData = new FormData();
+    if (form.elements.file.files[0]) {
+      formData.append('file', form.elements.file.files[0]);
+    }
+
+    var payload = await requestFormData('/uploads/video', formData);
+    var url = findFirst(payload, ['url']) || findFirst(payload, ['secureUrl']);
+    var publicId = findFirst(payload, ['publicId']);
+    var durationSeconds = findFirst(payload, ['durationSeconds']);
+    if (url) {
+      renderResult('Video upload saved', {
+        note: 'Copy url into mediaUrls for post.',
+        url: url,
+        publicId: publicId || null,
+        durationSeconds: durationSeconds || null,
+        response: payload,
+      });
+      return;
+    }
+
+    renderResult('Video upload response received', payload);
   }
 
   function notifications(form) {
@@ -207,6 +241,38 @@
       cursor: formValue(form, 'cursor'),
       unreadOnly: form.elements.unreadOnly.checked ? 'true' : '',
     }), null, { requireToken: true });
+  }
+
+  function registerDeviceTokenManual(form) {
+    return request('POST', '/devices/token', compact({
+      token: formValue(form, 'token'),
+      platform: formValue(form, 'platform') || 'web',
+      userId: formValue(form, 'userId'),
+    })).then(function (payload) {
+      captureCommon(payload);
+      return payload;
+    });
+  }
+
+  function testPushToken(form) {
+    return request('POST', '/notifications/test', compact({
+      token: formValue(form, 'token'),
+      title: formValue(form, 'title'),
+      body: formValue(form, 'body'),
+      data: parseJsonField(formValue(form, 'dataJson')),
+    }));
+  }
+
+  function testPushUser(form) {
+    return request(
+      'POST',
+      '/notifications/test/user/' + encode(formValue(form, 'userId')),
+      compact({
+        title: formValue(form, 'title'),
+        body: formValue(form, 'body'),
+        data: parseJsonField(formValue(form, 'dataJson')),
+      }),
+    );
   }
 
   function directConversation(form) {
@@ -491,6 +557,19 @@
         return item.trim();
       })
       .filter(Boolean);
+  }
+
+  function parseJsonField(value) {
+    if (!value) return undefined;
+    try {
+      var parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+      throw new Error('JSON must be an object.');
+    } catch (error) {
+      throw new Error('Invalid JSON in data field: ' + (error instanceof Error ? error.message : String(error)));
+    }
   }
 
   function queryString(input) {

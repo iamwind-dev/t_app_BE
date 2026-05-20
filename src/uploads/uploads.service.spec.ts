@@ -8,6 +8,7 @@ describe('UploadsService', () => {
   let service: UploadsService;
   let storageProvider: ImageStorageProvider & {
     uploadImage: jest.Mock;
+    uploadVideo: jest.Mock;
   };
   let prisma: {
     upload: {
@@ -33,6 +34,7 @@ describe('UploadsService', () => {
   beforeEach(() => {
     storageProvider = {
       uploadImage: jest.fn(),
+      uploadVideo: jest.fn(),
     };
     prisma = {
       upload: {
@@ -93,12 +95,8 @@ describe('UploadsService', () => {
       },
     });
     expect(result).toEqual({
-      upload: {
-        id: 'upload-id',
-        secureUrl: 'https://cdn.example.com/uploads/posts/public-id.jpg',
-        publicId: 'uploads/posts/public-id',
-        type: 'post',
-      },
+      url: 'https://cdn.example.com/uploads/posts/public-id.jpg',
+      publicId: 'uploads/posts/public-id',
     });
   });
 
@@ -148,6 +146,39 @@ describe('UploadsService', () => {
 
   it('uses the image storage provider injection token', () => {
     expect(IMAGE_STORAGE_PROVIDER).toBe('IMAGE_STORAGE_PROVIDER');
+  });
+
+  it('uploads a valid post video with max duration enforcement delegated to provider', async () => {
+    storageProvider.uploadVideo.mockResolvedValue({
+      secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
+      publicId: 'uploads/posts/video',
+      durationSeconds: 9.4,
+    });
+    prisma.upload.create.mockResolvedValue({
+      secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
+      publicId: 'uploads/posts/video',
+    });
+
+    const videoFile = {
+      ...imageFile,
+      mimetype: 'video/mp4',
+      originalname: 'video.mp4',
+      size: 1024 * 1024,
+      buffer: Buffer.from('fake-video'),
+    };
+
+    const result = await service.uploadPostVideo(userId, videoFile, {});
+
+    expect(storageProvider.uploadVideo).toHaveBeenCalledWith({
+      userId,
+      file: videoFile,
+      maxDurationSeconds: 10,
+    });
+    expect(result).toEqual({
+      url: 'https://cdn.example.com/uploads/posts/video.mp4',
+      publicId: 'uploads/posts/video',
+      durationSeconds: 9.4,
+    });
   });
 
   it('attaches matching uploads and orphans removed resource uploads', async () => {
