@@ -170,6 +170,47 @@ describe('FollowsService', () => {
     await expect(service.followUser(user.id, user.id)).rejects.toThrow(BadRequestException);
   });
 
+  it('creates a new follow notification source id when re-following a previously unfollowed user', async () => {
+    const targetUser = {
+      ...user,
+      id: '2b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1',
+      username: 'target_user',
+      followerCount: 2,
+    };
+    const updatedTargetUser = { ...targetUser, followerCount: 3 };
+    prisma.user.findFirst.mockResolvedValueOnce(targetUser).mockResolvedValueOnce(updatedTargetUser);
+    prisma.follow.updateMany.mockResolvedValue({ count: 1 });
+    prisma.user.update.mockResolvedValue(user);
+    prisma.follow.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'existing-follow-id',
+        deletedAt: new Date('2026-04-24T10:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'existing-follow-id',
+        followerId: user.id,
+        followingId: targetUser.id,
+        deletedAt: null,
+      });
+
+    await service.followUser(user.id, targetUser.id);
+
+    expect(prisma.follow.create).not.toHaveBeenCalled();
+    expect(notificationsService.createFollowNotification).toHaveBeenCalledWith({
+      actorId: user.id,
+      recipientId: targetUser.id,
+      followId: expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      ),
+    });
+    expect(notificationsService.createFollowNotification).not.toHaveBeenCalledWith({
+      actorId: user.id,
+      recipientId: targetUser.id,
+      followId: 'existing-follow-id',
+    });
+  });
+
   it('lists followers with cursor pagination and optional isFollowing context', async () => {
     const targetUserId = '2b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
     const followCreatedAt = new Date('2026-04-24T18:00:00.000Z');

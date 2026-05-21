@@ -217,7 +217,17 @@ describe('PostsService', () => {
   });
 
   it('returns feed items without deleted posts and computes isLikedByMe', async () => {
-    prisma.post.findMany.mockResolvedValue([{ ...post, reactions: [{ id: 'reaction-id' }] }]);
+    const latestAuthorAvatarUrl = 'https://cdn.example.com/uploads/avatars/latest.jpg';
+    prisma.post.findMany.mockResolvedValue([
+      {
+        ...post,
+        author: {
+          ...author,
+          avatarUrl: latestAuthorAvatarUrl,
+        },
+        reactions: [{ id: 'reaction-id' }],
+      },
+    ]);
 
     const result = await service.getFeed(author.id, { limit: 20 });
 
@@ -229,9 +239,28 @@ describe('PostsService', () => {
       take: 21,
       cursor: undefined,
       skip: undefined,
-      include: expect.any(Object),
+      include: {
+        author: {
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            avatarUrl: true,
+          },
+        },
+        reactions: {
+          where: {
+            userId: author.id,
+            type: 'LIKE',
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
     });
     expect(result.items[0]?.isLikedByMe).toBe(true);
+    expect(result.items[0]?.author.avatarUrl).toBe(latestAuthorAvatarUrl);
     expect(result.pageInfo).toEqual({
       nextCursor: null,
       hasNextPage: false,

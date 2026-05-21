@@ -331,11 +331,37 @@ export class UploadsService {
       userId,
       type,
       errorName: error instanceof Error ? error.name : 'UnknownError',
-      errorMessage: error instanceof Error ? error.message : String(error),
+      errorMessage: this.toErrorMessage(error),
+      errorDetails: error instanceof Error ? undefined : this.toSerializableError(error),
       stack: error instanceof Error ? error.stack : undefined,
     };
 
     return JSON.stringify(details);
+  }
+
+  private toErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+      return error.message;
+    }
+
+    if (typeof error === 'string') {
+      return error;
+    }
+
+    return JSON.stringify(this.toSerializableError(error));
+  }
+
+  private toSerializableError(error: unknown): unknown {
+    if (typeof error !== 'object' || error === null) {
+      return error;
+    }
+
+    return Object.fromEntries(
+      Object.entries(error).map(([key, value]) => [
+        key,
+        typeof value === 'function' ? '[Function]' : value,
+      ]),
+    );
   }
 
   private uniqueSecureUrls(secureUrls: string[]): string[] {

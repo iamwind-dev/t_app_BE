@@ -1,4 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
+import { DomainEventEnvelope } from '../domain-events/types/domain-event.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublicUserProfile } from '../users/types/user-profile.type';
@@ -48,11 +52,27 @@ interface FollowRecord {
   >;
 }
 
+interface TransactionClient {
+  follow: {
+    updateMany(args: unknown): Promise<{ count: number }>;
+    create(args: unknown): Promise<{ id: string }>;
+    update(args: unknown): Promise<unknown>;
+  };
+  user: {
+    update(args: unknown): Promise<unknown>;
+  };
+  domainEventOutbox: {
+    create(args: unknown): Promise<unknown>;
+  };
+}
+
 @Injectable()
 export class FollowsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly domainEventsService?: DomainEventsService,
+    private readonly realtimeEventsService?: RealtimeEventsService,
   ) {}
 
   async followUser(currentUserId: string, targetUserId: string): Promise<PublicUserProfile> {
@@ -88,13 +108,14 @@ export class FollowsService {
       },
     })) as Pick<FollowRecord, 'id' | 'deletedAt'> | null;
 
-    let followId: string | null = null;
+    let notificationSourceId: string | null = null;
     let activated = false;
 
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        const client = tx as unknown as TransactionClient;
         if (existingFollow?.id) {
-          const updateResult = await tx.follow.updateMany({
+          const updateResult = await client.follow.updateMany({
             where: {
               id: existingFollow.id,
               deletedAt: {
@@ -105,23 +126,40 @@ export class FollowsService {
           });
 
           if (updateResult.count === 0) {
-            return { followId: existingFollow.id, activated: false };
+            return { notificationSourceId: existingFollow.id, activated: false };
           }
 
-          await tx.user.update({
+          await client.user.update({
             where: { id: currentUserId },
             data: { followingCount: { increment: 1 } },
           });
 
-          await tx.user.update({
+          await client.user.update({
             where: { id: targetUserId },
             data: { followerCount: { increment: 1 } },
           });
 
-          return { followId: existingFollow.id, activated: true };
+          return {
+            notificationSourceId: randomUUID(),
+            activated: true,
+            event: await this.createOutboxEvent(
+              {
+                type: 'follow.created',
+                actorId: currentUserId,
+                subjectType: 'FOLLOW',
+                subjectId: existingFollow.id,
+                rooms: [`user:${targetUserId}`, `user:${currentUserId}`],
+                payload: {
+                  followerId: currentUserId,
+                  followingId: targetUserId,
+                },
+              },
+              client,
+            ),
+          };
         }
 
-        const created = (await tx.follow.create({
+        const created = (await client.follow.create({
           data: {
             followerId: currentUserId,
             followingId: targetUserId,
@@ -129,36 +167,55 @@ export class FollowsService {
           select: { id: true },
         })) as { id: string };
 
-        await tx.user.update({
+        await client.user.update({
           where: { id: currentUserId },
           data: { followingCount: { increment: 1 } },
         });
 
-        await tx.user.update({
+        await client.user.update({
           where: { id: targetUserId },
           data: { followerCount: { increment: 1 } },
         });
 
-        return { followId: created.id, activated: true };
+        return {
+          notificationSourceId: created.id,
+          activated: true,
+          event: await this.createOutboxEvent(
+            {
+              type: 'follow.created',
+              actorId: currentUserId,
+              subjectType: 'FOLLOW',
+              subjectId: created.id,
+              rooms: [`user:${targetUserId}`, `user:${currentUserId}`],
+              payload: {
+                followerId: currentUserId,
+                followingId: targetUserId,
+              },
+            },
+            client,
+          ),
+        };
       });
 
-      followId = result.followId;
+      notificationSourceId = result.notificationSourceId;
       activated = result.activated;
+      await this.publishEvent(result.event ?? null);
     } catch (error) {
       if (!this.isPrismaUniqueConstraintError(error)) {
         throw error;
       }
 
-      followId = null;
+      notificationSourceId = null;
       activated = false;
     }
 
-    if (activated && followId) {
+    if (activated && notificationSourceId) {
       await this.notificationsService.createFollowNotification({
         actorId: currentUserId,
         recipientId: targetUserId,
-        followId,
+        followId: notificationSourceId,
       });
+
     }
 
     const updatedTargetUser = await this.findActiveUserById(targetUserId);
@@ -186,20 +243,37 @@ export class FollowsService {
       return this.toPublicProfile(targetUser, currentUserId);
     }
 
-    await this.prisma.$transaction([
-      this.prisma.follow.update({
+    const event = await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
+      await client.follow.update({
         where: { id: activeFollow.id },
         data: { deletedAt: new Date() },
-      }),
-      this.prisma.user.update({
+      });
+      await client.user.update({
         where: { id: currentUserId },
         data: { followingCount: { decrement: 1 } },
-      }),
-      this.prisma.user.update({
+      });
+      await client.user.update({
         where: { id: targetUserId },
         data: { followerCount: { decrement: 1 } },
-      }),
-    ]);
+      });
+
+      return this.createOutboxEvent(
+        {
+          type: 'follow.deleted',
+          actorId: currentUserId,
+          subjectType: 'FOLLOW',
+          subjectId: activeFollow.id,
+          rooms: [`user:${targetUserId}`, `user:${currentUserId}`],
+          payload: {
+            followerId: currentUserId,
+            followingId: targetUserId,
+          },
+        },
+        client,
+      );
+    });
+    await this.publishEvent(event);
 
     const updatedTargetUser = await this.findActiveUserById(targetUserId);
     return this.toPublicProfile(updatedTargetUser, currentUserId);
@@ -448,5 +522,36 @@ export class FollowsService {
       'code' in error &&
       (error as { code?: unknown }).code === 'P2002'
     );
+  }
+
+  private async createOutboxEvent(
+    input: {
+    type: string;
+    actorId: string;
+    subjectType: string;
+    subjectId: string;
+    rooms: string[];
+    payload: unknown;
+    },
+    tx: TransactionClient,
+  ): Promise<DomainEventEnvelope | null> {
+    if (!this.domainEventsService) {
+      return null;
+    }
+
+    return this.domainEventsService.createEvent(input, tx);
+  }
+
+  private async publishEvent(event: DomainEventEnvelope | null): Promise<void> {
+    if (!event || !this.domainEventsService || !this.realtimeEventsService) {
+      return;
+    }
+
+    try {
+      this.realtimeEventsService.publish(event);
+      await this.domainEventsService.markPublished(event.eventId);
+    } catch {
+      return;
+    }
   }
 }

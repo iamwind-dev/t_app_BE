@@ -16,6 +16,10 @@ interface EnvironmentVariables {
   CLOUDINARY_API_KEY?: string;
   CLOUDINARY_API_SECRET?: string;
   CLOUDINARY_UPLOAD_FOLDER: string;
+  FIREBASE_SERVICE_ACCOUNT_JSON?: string;
+  FIREBASE_PROJECT_ID?: string;
+  FIREBASE_CLIENT_EMAIL?: string;
+  FIREBASE_PRIVATE_KEY?: string;
   UPLOAD_PENDING_TTL_HOURS: number;
   AI_MODERATION_BASE_URL: string;
   AI_MODERATION_TIMEOUT_MS: number;
@@ -63,8 +67,15 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
     throw new Error('AI_MODERATION_TIMEOUT_MS must be an integer between 100 and 60000.');
   }
 
+  const nodeEnv = getString(config.NODE_ENV, 'development');
+  const uploadPublicBaseUrl = getString(config.UPLOAD_PUBLIC_BASE_URL, 'https://localhost:3000/uploads');
+  const isNonDev = nodeEnv !== 'development' && nodeEnv !== 'test';
+  if (isNonDev && isLocalhostUrl(uploadPublicBaseUrl)) {
+    throw new Error('UPLOAD_PUBLIC_BASE_URL must be publicly accessible and must not use localhost in non-development environments.');
+  }
+
   return {
-    NODE_ENV: getString(config.NODE_ENV, 'development'),
+    NODE_ENV: nodeEnv,
     PORT: port,
     DATABASE_URL:
       typeof config.DATABASE_URL === 'string' && config.DATABASE_URL.length > 0
@@ -80,10 +91,7 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
     SWAGGER_PATH: getString(config.SWAGGER_PATH, 'docs'),
     UPLOAD_STORAGE_PROVIDER: getString(config.UPLOAD_STORAGE_PROVIDER, 'local'),
     UPLOAD_LOCAL_DIR: getString(config.UPLOAD_LOCAL_DIR, 'uploads'),
-    UPLOAD_PUBLIC_BASE_URL: getString(
-      config.UPLOAD_PUBLIC_BASE_URL,
-      'https://localhost:3000/uploads',
-    ),
+    UPLOAD_PUBLIC_BASE_URL: uploadPublicBaseUrl,
     UPLOAD_MAX_IMAGE_SIZE_BYTES: uploadMaxImageSizeBytes,
     UPLOAD_MAX_VIDEO_SIZE_BYTES: uploadMaxVideoSizeBytes,
     CLOUDINARY_CLOUD_NAME:
@@ -99,6 +107,24 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
         ? config.CLOUDINARY_API_SECRET
         : undefined,
     CLOUDINARY_UPLOAD_FOLDER: getString(config.CLOUDINARY_UPLOAD_FOLDER, 'threads-like'),
+    FIREBASE_SERVICE_ACCOUNT_JSON:
+      typeof config.FIREBASE_SERVICE_ACCOUNT_JSON === 'string' &&
+      config.FIREBASE_SERVICE_ACCOUNT_JSON.length > 0
+        ? config.FIREBASE_SERVICE_ACCOUNT_JSON
+        : undefined,
+    FIREBASE_PROJECT_ID:
+      typeof config.FIREBASE_PROJECT_ID === 'string' && config.FIREBASE_PROJECT_ID.length > 0
+        ? config.FIREBASE_PROJECT_ID
+        : undefined,
+    FIREBASE_CLIENT_EMAIL:
+      typeof config.FIREBASE_CLIENT_EMAIL === 'string' &&
+      config.FIREBASE_CLIENT_EMAIL.length > 0
+        ? config.FIREBASE_CLIENT_EMAIL
+        : undefined,
+    FIREBASE_PRIVATE_KEY:
+      typeof config.FIREBASE_PRIVATE_KEY === 'string' && config.FIREBASE_PRIVATE_KEY.length > 0
+        ? config.FIREBASE_PRIVATE_KEY
+        : undefined,
     UPLOAD_PENDING_TTL_HOURS: uploadPendingTtlHours,
     AI_MODERATION_BASE_URL: getString(config.AI_MODERATION_BASE_URL, 'http://localhost:8000'),
     AI_MODERATION_TIMEOUT_MS: aiModerationTimeoutMs,
@@ -107,4 +133,13 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
 
 function getString(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback;
+}
+
+function isLocalhostUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+  } catch {
+    return value.includes('localhost');
+  }
 }

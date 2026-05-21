@@ -5,6 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
+import { DomainEventEnvelope } from '../domain-events/types/domain-event.type';
 import { TestPushTokenDto } from './dto/test-push-token.dto';
 import { TestPushUserDto } from './dto/test-push-user.dto';
 import { NotificationsQueryDto } from './dto/notifications-query.dto';
@@ -62,6 +65,8 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly pushNotificationsService: PushNotificationsService,
+    private readonly domainEventsService?: DomainEventsService,
+    private readonly realtimeEventsService?: RealtimeEventsService,
   ) {}
 
   async getUnreadCount(currentUserId: string): Promise<UnreadNotificationsCountResponse> {
@@ -315,23 +320,43 @@ export class NotificationsService {
     const actorName = await this.getActorDisplayName(input.actorId);
 
     try {
-      const notification = (await this.prisma.notification.create({
-        data: {
-          type: input.type,
-          recipientId: input.recipientId,
-          actorId: input.actorId,
-          targetType: input.targetType,
-          targetId: input.targetId,
-          sourceType: input.sourceType,
-          sourceId: input.sourceId,
-          message: input.messageBuilder(actorName),
-          metadata: this.toPrismaJson(input.metadata),
-        },
-        include: notificationInclude,
-      })) as unknown as NotificationRecord;
+      const result = await this.runInTransaction(async (tx) => {
+        const client = tx as unknown as NotificationsTransactionClient;
+        const notification = (await client.notification.create({
+          data: {
+            type: input.type,
+            recipientId: input.recipientId,
+            actorId: input.actorId,
+            targetType: input.targetType,
+            targetId: input.targetId,
+            sourceType: input.sourceType,
+            sourceId: input.sourceId,
+            message: input.messageBuilder(actorName),
+            metadata: this.toPrismaJson(input.metadata),
+          },
+          include: notificationInclude,
+        })) as NotificationRecord;
+        const response = this.toNotificationResponse(notification);
+        const event = await this.createOutboxEvent(
+          {
+            type: 'notification.created',
+            actorId: input.actorId,
+            subjectType: 'NOTIFICATION',
+            subjectId: response.id,
+            rooms: [`user:${input.recipientId}`],
+            payload: {
+              notification: response,
+            },
+          },
+          client,
+        );
 
-      const response = this.toNotificationResponse(notification);
+        return { notification, event };
+      });
+
+      const response = this.toNotificationResponse(result.notification);
       await this.dispatchPushNotification(response);
+      await this.publishEvent(result.event);
 
       return response;
     } catch (error) {
@@ -379,7 +404,7 @@ export class NotificationsService {
         id: notification.id,
         type: notification.type,
         recipientId: notification.recipientId,
-        title: 'New notification',
+        title: 'Together Notification',
         body: notification.message,
         targetType: notification.target.type,
         targetId: notification.target.id,
@@ -476,9 +501,62 @@ export class NotificationsService {
       });
     }
 
+    const message =
+      error instanceof Error && error.message.length > 0 ? error.message : 'Unknown Firebase error.';
+
     return new InternalServerErrorException({
       code: 'FCM_SEND_FAILED',
-      message: 'Failed to send push notification.',
+      message: `Failed to send push notification. Firebase code: ${code || 'unknown'}. ${message}`,
     });
   }
+
+  private async createOutboxEvent(
+    input: {
+    type: string;
+    actorId: string;
+    subjectType: string;
+    subjectId: string;
+    rooms: string[];
+    payload: unknown;
+    },
+    tx: NotificationsTransactionClient,
+  ): Promise<DomainEventEnvelope | null> {
+    if (!this.domainEventsService) {
+      return null;
+    }
+
+    return this.domainEventsService.createEvent(input, tx);
+  }
+
+  private async publishEvent(event: DomainEventEnvelope | null): Promise<void> {
+    if (!event || !this.domainEventsService || !this.realtimeEventsService) {
+      return;
+    }
+
+    try {
+      this.realtimeEventsService.publish(event);
+      await this.domainEventsService.markPublished(event.eventId);
+    } catch {
+      return;
+    }
+  }
+
+  private async runInTransaction<T>(
+    fn: (tx: NotificationsTransactionClient) => Promise<T>,
+  ): Promise<T> {
+    if (typeof this.prisma.$transaction !== 'function') {
+      return fn(this.prisma as unknown as NotificationsTransactionClient);
+    }
+
+    return this.prisma.$transaction(async (tx) => fn(tx as unknown as NotificationsTransactionClient));
+  }
+}
+
+interface NotificationsTransactionClient {
+  notification: {
+    create(args: unknown): Promise<unknown>;
+  };
+  domainEventOutbox: {
+    create(args: unknown): Promise<unknown>;
+  };
 }

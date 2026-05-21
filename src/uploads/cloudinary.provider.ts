@@ -155,7 +155,15 @@ export class CloudinaryProvider implements ImageStorageProvider {
   }
 
   private hasConfiguration(): boolean {
-    return Boolean(this.cloudName && this.apiKey && this.apiSecret);
+    return (
+      this.hasUsableCredential(this.cloudName, 'your-cloud-name') &&
+      this.hasUsableCredential(this.apiKey, 'your-api-key') &&
+      this.hasUsableCredential(this.apiSecret, 'your-api-secret')
+    );
+  }
+
+  private hasUsableCredential(value: string | undefined, placeholder: string): boolean {
+    return Boolean(value && value !== placeholder);
   }
 
   private async deleteUploadedAsset(publicId: string, resourceType: 'image' | 'video'): Promise<void> {

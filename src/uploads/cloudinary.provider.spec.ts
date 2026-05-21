@@ -100,6 +100,31 @@ describe('CloudinaryProvider', () => {
     ).rejects.toThrow(ServiceUnavailableException);
   });
 
+  it('fails clearly when Cloudinary credentials still use placeholder values', async () => {
+    const provider = new CloudinaryProvider({
+      get: jest.fn((key: string, fallback?: string) => {
+        const values: Record<string, string> = {
+          CLOUDINARY_CLOUD_NAME: 'your-cloud-name',
+          CLOUDINARY_API_KEY: 'your-api-key',
+          CLOUDINARY_API_SECRET: 'your-api-secret',
+          CLOUDINARY_UPLOAD_FOLDER: 'threads-like',
+        };
+
+        return values[key] ?? fallback;
+      }),
+    } as never);
+
+    await expect(
+      provider.uploadImage({
+        userId: 'user-id',
+        type: 'profile_avatar',
+        file: {
+          buffer: Buffer.from('image'),
+        } as Express.Multer.File,
+      }),
+    ).rejects.toThrow(ServiceUnavailableException);
+  });
+
   it('uploads post video and returns duration when <= maxDurationSeconds', async () => {
     const uploadStream = {
       end: uploadStreamEnd,
