@@ -17,8 +17,8 @@ interface EnvironmentVariables {
   CLOUDINARY_API_SECRET?: string;
   CLOUDINARY_UPLOAD_FOLDER: string;
   UPLOAD_PENDING_TTL_HOURS: number;
-  AI_MODERATION_BASE_URL: string;
-  AI_MODERATION_TIMEOUT_MS: number;
+  AI_SERVICE_URL: string;
+  AI_SERVICE_TIMEOUT_MS: number;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvironmentVariables {
@@ -58,9 +58,11 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
     throw new Error('UPLOAD_PENDING_TTL_HOURS must be an integer between 1 and 720.');
   }
 
-  const aiModerationTimeoutMs = Number(config.AI_MODERATION_TIMEOUT_MS ?? 5000);
-  if (!Number.isInteger(aiModerationTimeoutMs) || aiModerationTimeoutMs < 100 || aiModerationTimeoutMs > 60000) {
-    throw new Error('AI_MODERATION_TIMEOUT_MS must be an integer between 100 and 60000.');
+  const aiServiceTimeoutMs = Number(
+    config.AI_SERVICE_TIMEOUT_MS ?? config.AI_MODERATION_TIMEOUT_MS ?? 8000,
+  );
+  if (!Number.isInteger(aiServiceTimeoutMs) || aiServiceTimeoutMs < 100 || aiServiceTimeoutMs > 60000) {
+    throw new Error('AI_SERVICE_TIMEOUT_MS must be an integer between 100 and 60000.');
   }
 
   return {
@@ -100,8 +102,11 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
         : undefined,
     CLOUDINARY_UPLOAD_FOLDER: getString(config.CLOUDINARY_UPLOAD_FOLDER, 'threads-like'),
     UPLOAD_PENDING_TTL_HOURS: uploadPendingTtlHours,
-    AI_MODERATION_BASE_URL: getString(config.AI_MODERATION_BASE_URL, 'http://localhost:8000'),
-    AI_MODERATION_TIMEOUT_MS: aiModerationTimeoutMs,
+    AI_SERVICE_URL: getString(
+      config.AI_SERVICE_URL ?? config.AI_MODERATION_BASE_URL,
+      'http://localhost:8000',
+    ),
+    AI_SERVICE_TIMEOUT_MS: aiServiceTimeoutMs,
   };
 }
 

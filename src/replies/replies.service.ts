@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ModerationService } from '../modules/moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { CreateReplyDto } from './dto/create-reply.dto';
@@ -44,6 +45,12 @@ interface ReplyRecord {
   likeCount: number;
   childReplyCount: number;
   moderationStatus: string;
+  moderationLabel: string | null;
+  moderationConfidence: number | null;
+  moderationAction: string | null;
+  moderationIsWarning: boolean;
+  moderationModel: string | null;
+  aiReviewedAt: Date | null;
   createdAt: Date;
   author: ContentAuthor;
   reactions?: Array<{ id: string }>;
@@ -70,6 +77,7 @@ export class RepliesService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly uploadsService: UploadsService,
+    private readonly moderationService: ModerationService,
   ) {}
 
   async createPostReply(
@@ -89,7 +97,7 @@ export class RepliesService {
       dto,
     });
 
-    return { reply };
+    return reply;
   }
 
   async createChildReply(
@@ -109,7 +117,7 @@ export class RepliesService {
       dto,
     });
 
-    return { reply };
+    return reply;
   }
 
   async listPostReplies(
@@ -249,10 +257,12 @@ export class RepliesService {
     notificationTargetType: 'POST' | 'REPLY';
     notificationTargetId: string;
     dto: CreateReplyDto;
-  }): Promise<ReplyResponseItem> {
+  }): Promise<ReplyResponse> {
     const content = this.normalizeContent(input.dto.content);
     const mediaUrls = input.dto.mediaUrls ?? [];
     this.assertReplyHasContentOrMedia(content, mediaUrls);
+    const moderation = await this.moderationService.moderateText(content ?? '');
+    const aiReviewedAt = new Date();
 
     const reply = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
@@ -263,7 +273,16 @@ export class RepliesService {
           authorId: input.currentUserId,
           content,
           mediaUrls,
-          moderationStatus: 'APPROVED',
+          moderationStatus: moderation.status,
+          moderationScore: moderation.final_confidence,
+          moderationReason: moderation.final_label,
+          moderationLabel: moderation.final_label,
+          moderationConfidence: moderation.final_confidence,
+          moderationAction: moderation.action,
+          moderationIsWarning: moderation.is_warning,
+          moderationModel: moderation.model,
+          moderationRaw: moderation,
+          aiReviewedAt,
         },
         include: this.replyInclude(input.currentUserId),
       });
@@ -293,15 +312,20 @@ export class RepliesService {
       attachedToId: reply.id,
     });
 
-    await this.notificationsService.createReplyNotification({
-      actorId: input.currentUserId,
-      recipientId: input.targetAuthorId,
-      targetType: input.notificationTargetType,
-      targetId: input.notificationTargetId,
-      replyId: reply.id,
-    });
+    if (moderation.status !== 'FLAGGED') {
+      await this.notificationsService.createReplyNotification({
+        actorId: input.currentUserId,
+        recipientId: input.targetAuthorId,
+        targetType: input.notificationTargetType,
+        targetId: input.notificationTargetId,
+        replyId: reply.id,
+      });
+    }
 
-    return this.toReplyResponseItem(reply);
+    return {
+      reply: this.toReplyResponseItem(reply),
+      moderation,
+    };
   }
 
   private async listReplies(input: {
@@ -395,6 +419,12 @@ export class RepliesService {
         likeCount: true,
         childReplyCount: true,
         moderationStatus: true,
+        moderationLabel: true,
+        moderationConfidence: true,
+        moderationAction: true,
+        moderationIsWarning: true,
+        moderationModel: true,
+        aiReviewedAt: true,
         createdAt: true,
         author: {
           select: {
@@ -471,6 +501,12 @@ export class RepliesService {
       likeCount: reply.likeCount,
       childReplyCount: reply.childReplyCount,
       moderationStatus: reply.moderationStatus.toLowerCase(),
+      moderationLabel: reply.moderationLabel,
+      moderationConfidence: reply.moderationConfidence,
+      moderationAction: reply.moderationAction,
+      moderationIsWarning: reply.moderationIsWarning,
+      moderationModel: reply.moderationModel,
+      aiReviewedAt: reply.aiReviewedAt,
       createdAt: reply.createdAt,
       isLikedByMe: (reply.reactions ?? []).length > 0,
     };

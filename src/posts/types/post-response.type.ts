@@ -1,8 +1,14 @@
+import { ModerationResult } from '../../modules/moderation/interfaces/moderation-result.interface';
+
 export interface PostResponseItem {
   id: string;
   content: string | null;
   mediaUrls: string[];
   moderationStatus: string;
+  moderationLabel: string | null;
+  moderationConfidence: number | null;
+  moderationAction: string | null;
+  moderationIsWarning: boolean;
   visibilityLevel: string;
   toxicityScore: number | null;
   moderationCategories: string[];
@@ -25,16 +31,7 @@ export interface PostResponseItem {
 
 export interface PostResponse {
   post: PostResponseItem;
-  moderation?: {
-    label: string;
-    toxicityScore: number;
-    categories: string[];
-    message: string;
-    highlights: unknown[];
-    suggestion: string;
-    model: string;
-    visibilityLevel: string;
-  };
+  moderation?: ModerationResult;
 }
 
 export interface FeedResponse {
