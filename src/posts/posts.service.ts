@@ -11,9 +11,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { ModerationService } from '../modules/moderation/moderation.service';
+
 import { DomainEventsService } from '../domain-events/domain-events.service';
 import { RealtimeEventsService } from '../domain-events/realtime-events.service';
 import { DomainEventEnvelope } from '../domain-events/types/domain-event.type';
+
+import { ModerationResult } from '../modules/moderation/interfaces/moderation-result.interface';
+
 
 interface PostRecord {
   id: string;
@@ -23,6 +27,10 @@ interface PostRecord {
   likeCount: number;
   replyCount: number;
   moderationStatus: string;
+  moderationLabel: string | null;
+  moderationConfidence: number | null;
+  moderationAction: string | null;
+  moderationIsWarning: boolean;
   visibilityLevel: string;
   toxicityScore: number | null;
   moderationCategories: string[];
@@ -79,7 +87,7 @@ export class PostsService {
 
     this.assertPostHasContentOrMedia(content, mediaUrls);
     const moderation = await this.moderationService.moderateText(content ?? '');
-    const visibilityLevel = this.moderationService.toVisibilityLevel(moderation.label);
+    const visibilityLevel = this.moderationService.toVisibilityLevel(moderation.status);
     const aiReviewedAt = new Date();
 
     const result = await this.prisma.$transaction(async (tx) => {
@@ -90,13 +98,20 @@ export class PostsService {
           authorId: userId,
           content,
           mediaUrls,
-          moderationStatus: moderation.label,
-          toxicityScore: moderation.toxicityScore,
-          moderationCategories: moderation.categories,
-          moderationMessage: moderation.message,
-          moderationHighlights: moderation.highlights,
-          moderationSuggestion: moderation.suggestion,
+          moderationStatus: moderation.status,
+          moderationScore: moderation.final_confidence,
+          moderationReason: moderation.final_label,
+          toxicityScore: moderation.final_confidence,
+          moderationCategories: this.toModerationCategories(moderation),
+          moderationMessage: moderation.action,
+          moderationHighlights: [],
+          moderationSuggestion: null,
           moderationModel: moderation.model,
+          moderationLabel: moderation.final_label,
+          moderationConfidence: moderation.final_confidence,
+          moderationAction: moderation.action,
+          moderationIsWarning: moderation.is_warning,
+          moderationRaw: moderation,
           visibilityLevel,
           aiReviewedAt,
         },
@@ -146,14 +161,7 @@ export class PostsService {
     return {
       post: this.toPostResponseItem(post),
       moderation: {
-        label: moderation.label,
-        toxicityScore: moderation.toxicityScore,
-        categories: moderation.categories,
-        message: moderation.message,
-        highlights: moderation.highlights,
-        suggestion: moderation.suggestion,
-        model: moderation.model,
-        visibilityLevel,
+        ...moderation,
       },
     };
   }
@@ -373,6 +381,10 @@ export class PostsService {
       content: post.content,
       mediaUrls: post.mediaUrls,
       moderationStatus: post.moderationStatus.toLowerCase(),
+      moderationLabel: post.moderationLabel,
+      moderationConfidence: post.moderationConfidence,
+      moderationAction: post.moderationAction,
+      moderationIsWarning: post.moderationIsWarning,
       visibilityLevel: post.visibilityLevel.toLowerCase(),
       toxicityScore: post.toxicityScore,
       moderationCategories: post.moderationCategories,
@@ -387,6 +399,16 @@ export class PostsService {
       replyCount: post.replyCount,
       isLikedByMe: (post.reactions ?? []).length > 0,
     };
+  }
+
+  private toModerationCategories(moderation: ModerationResult): string[] {
+    return Array.from(
+      new Set(
+        moderation.layers
+          .filter((layer) => layer.is_warning)
+          .map((layer) => layer.label),
+      ),
+    );
   }
 
   private postInclude(currentUserId: string): {

@@ -1,15 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.models.model_loader import get_available_models
-from app.schemas.moderation_schema import (
-    CompareRequest,
-    ModerateRequest,
-    ModerateResponse,
-    PredictRequest,
-)
+from app.schemas.moderation_schema import ModerateRequest, ModerateResponse
 from app.services.moderation_service import ModerationService
 
-router = APIRouter(prefix="", tags=["moderation"])
+router = APIRouter(tags=["moderation"])
 
 
 def get_moderation_service() -> ModerationService:
@@ -25,37 +19,14 @@ def moderate_text(
 ) -> ModerateResponse:
     text = payload.text.strip()
     if not text:
-        raise HTTPException(status_code=400, detail="Vui long nhap binh luan")
-    return service.moderate(text, payload.model_name)
-
-
-@router.post("/predict")
-def predict_text(
-    payload: PredictRequest,
-    service: ModerationService = Depends(get_moderation_service),
-) -> dict:
-    text = payload.text.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Vui long nhap binh luan")
+        raise HTTPException(status_code=400, detail="Text must not be empty.")
 
     try:
-        return service.predict_raw(text, payload.model_name)
+        return service.moderate(text)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {error}") from error
-
-
-@router.post("/compare")
-def compare_text(
-    payload: CompareRequest,
-    service: ModerationService = Depends(get_moderation_service),
-) -> dict:
-    text = payload.text.strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="Vui long nhap binh luan")
-
-    return service.compare_raw(text, payload.model_names)
-
-
-@router.get("/models")
-def list_models() -> dict:
-    return {"models": get_available_models()}
+        raise HTTPException(
+            status_code=500,
+            detail=f"Moderation prediction failed: {error}",
+        ) from error

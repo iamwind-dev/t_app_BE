@@ -1,5 +1,13 @@
-export type ModerationLabel = 'SAFE' | 'WARNING' | 'RESTRICTED';
-export type VisibilityLevel = 'NORMAL' | 'LIMITED' | 'BLURRED' | 'COLLAPSED';
+export type ModerationLabel =
+  | 'clean'
+  | 'offensive'
+  | 'hate'
+  | 'discrimination'
+  | 'supportive'
+  | 'other';
+
+export type ModerationAction = 'ALLOW' | 'WARN_USER' | 'BLOCK_OR_REVIEW';
+export type VisibilityLevel = 'NORMAL' | 'LIMITED' | 'COLLAPSED';
 
 export interface ModerationHighlight {
   text: string;
@@ -8,14 +16,29 @@ export interface ModerationHighlight {
   end: number;
 }
 
+export interface ModerationLayerResult {
+  layer: string;
+  task: string;
+  model: string;
+  input_text: string;
+  pred_id: number;
+  label: ModerationLabel;
+  confidence: number;
+  probabilities: Record<string, number>;
+  is_warning: boolean;
+}
+
 export interface ModerationResult {
   label: ModerationLabel;
-  toxicityScore: number;
+  finalLabel: ModerationLabel;
+  finalConfidence: number;
+  action: ModerationAction;
+  isWarning: boolean;
   categories: string[];
   message: string;
-  highlights: ModerationHighlight[];
   suggestion: string;
   model: string;
+  layers: ModerationLayerResult[];
   visibilityLevel: VisibilityLevel;
   shouldBlurContent: boolean;
   moderationDisplayText: string;

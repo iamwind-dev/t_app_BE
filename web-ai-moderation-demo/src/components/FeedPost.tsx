@@ -23,10 +23,8 @@ export function FeedPost({ post }: Props): JSX.Element {
         <p className="feed-content">{post.content}</p>
       )}
       <p className="meta">
-        {new Date(post.createdAt).toLocaleTimeString()} • score {Math.round(
-          moderation.toxicityScore * 100,
-        )}
-        %
+        {new Date(post.createdAt).toLocaleTimeString()} | score{' '}
+        {Math.round(moderation.finalConfidence * 100)}%
       </p>
     </article>
   );

@@ -26,6 +26,10 @@ type MockPost = {
   likeCount: number;
   replyCount: number;
   moderationStatus: string;
+  moderationLabel: string | null;
+  moderationConfidence: number | null;
+  moderationAction: string | null;
+  moderationIsWarning: boolean;
   visibilityLevel: string;
   toxicityScore: number | null;
   moderationCategories: string[];
@@ -73,6 +77,10 @@ describe('PostsService', () => {
     likeCount: 3,
     replyCount: 2,
     moderationStatus: 'APPROVED',
+    moderationLabel: 'clean',
+    moderationConfidence: 0.99,
+    moderationAction: 'ALLOW',
+    moderationIsWarning: false,
     visibilityLevel: 'NORMAL',
     toxicityScore: 0,
     moderationCategories: [],
@@ -118,13 +126,14 @@ describe('PostsService', () => {
     };
     moderationService = {
       moderateText: jest.fn().mockResolvedValue({
-        label: 'SAFE',
-        toxicityScore: 0.01,
-        categories: [],
-        message: 'Noi dung an toan.',
-        highlights: [],
-        suggestion: '',
-        model: 'mask_partial_char',
+        text: 'Hello from posts.',
+        final_label: 'clean',
+        final_confidence: 0.01,
+        is_warning: false,
+        action: 'ALLOW',
+        layers: [],
+        status: 'APPROVED',
+        model: 'iamwindd/vihsd-visobert',
       }),
       toVisibilityLevel: jest.fn().mockReturnValue('NORMAL'),
     };
@@ -150,13 +159,29 @@ describe('PostsService', () => {
         authorId: author.id,
         content: 'Hello from posts.',
         mediaUrls: [],
-        moderationStatus: 'SAFE',
+        moderationStatus: 'APPROVED',
+        moderationScore: 0.01,
+        moderationReason: 'clean',
         toxicityScore: 0.01,
         moderationCategories: [],
-        moderationMessage: 'Noi dung an toan.',
+        moderationMessage: 'ALLOW',
         moderationHighlights: [],
-        moderationSuggestion: '',
-        moderationModel: 'mask_partial_char',
+        moderationSuggestion: null,
+        moderationModel: 'iamwindd/vihsd-visobert',
+        moderationLabel: 'clean',
+        moderationConfidence: 0.01,
+        moderationAction: 'ALLOW',
+        moderationIsWarning: false,
+        moderationRaw: {
+          text: 'Hello from posts.',
+          final_label: 'clean',
+          final_confidence: 0.01,
+          is_warning: false,
+          action: 'ALLOW',
+          layers: [],
+          status: 'APPROVED',
+          model: 'iamwindd/vihsd-visobert',
+        },
         visibilityLevel: 'NORMAL',
         aiReviewedAt: expect.any(Date),
       },
@@ -183,6 +208,10 @@ describe('PostsService', () => {
         content: post.content,
         mediaUrls: [],
         moderationStatus: 'approved',
+        moderationLabel: 'clean',
+        moderationConfidence: 0.99,
+        moderationAction: 'ALLOW',
+        moderationIsWarning: false,
         visibilityLevel: 'normal',
         toxicityScore: 0,
         moderationCategories: [],
@@ -198,14 +227,14 @@ describe('PostsService', () => {
         isLikedByMe: false,
       },
       moderation: {
-        label: 'SAFE',
-        toxicityScore: 0.01,
-        categories: [],
-        message: 'Noi dung an toan.',
-        highlights: [],
-        suggestion: '',
-        model: 'mask_partial_char',
-        visibilityLevel: 'NORMAL',
+        text: 'Hello from posts.',
+        final_label: 'clean',
+        final_confidence: 0.01,
+        is_warning: false,
+        action: 'ALLOW',
+        layers: [],
+        status: 'APPROVED',
+        model: 'iamwindd/vihsd-visobert',
       },
     });
   });

@@ -1,35 +1,33 @@
 from fastapi import FastAPI
 
-from app.models.model_loader import (
-    get_available_models,
-    get_model_bundle,
-    get_startup_error,
-    load_model,
-)
+from app.models.model_loader import load_models
 from app.routes.moderation import router as moderation_router
+from app.schemas.moderation_schema import HealthResponse, RootResponse
 from app.services.moderation_service import ModerationService
 
-app = FastAPI(title="Threads AI Moderation Service", version="0.1.0")
+loaded_models = load_models()
+moderation_service = ModerationService(models=loaded_models)
 
-loaded_model = load_model()
-moderation_service = ModerationService(model=loaded_model)
+app = FastAPI(title="Vietnamese AI Moderation Service", version="1.0.0")
 
 
-@app.get("/health")
-def health() -> dict:
-    startup_error = get_startup_error()
-    if startup_error:
-        return {"status": "error", "detail": startup_error, "available_models": get_available_models()}
+@app.get("/", response_model=RootResponse)
+def root() -> RootResponse:
+    return RootResponse(
+        service="Vietnamese AI Moderation Service",
+        status="running",
+        device=moderation_service.device,
+        layer_1_model=moderation_service.layer_1_model_id,
+        layer_2_model=moderation_service.layer_2_model_id,
+    )
 
-    active_bundle = get_model_bundle()
-    return {
-        "status": "ok",
-        "model_name": active_bundle.model_name,
-        "model_dir": str(active_bundle.model_dir),
-        "model_source": active_bundle.source,
-        "device": str(active_bundle.device),
-        "available_models": get_available_models(),
-    }
+
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(
+        status="ok",
+        device=moderation_service.device,
+    )
 
 
 app.include_router(moderation_router)

@@ -5,5 +5,5 @@ interface Props {
 }
 
 export function ModerationStatusChip({ label }: Props): JSX.Element {
-  return <span className={`chip chip-${label.toLowerCase()}`}>{label}</span>;
+  return <span className={`chip chip-${label.toLowerCase()}`}>{label.toUpperCase()}</span>;
 }

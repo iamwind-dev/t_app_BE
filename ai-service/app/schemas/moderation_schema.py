@@ -5,52 +5,38 @@ class ModerateRequest(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
     text: str = Field(..., min_length=1, max_length=5000)
-    model_name: str | None = None
 
 
-class PredictRequest(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    text: str = Field(..., min_length=1, max_length=5000)
-    model_name: str | None = None
-
-
-class CompareRequest(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
-
-    text: str = Field(..., min_length=1, max_length=5000)
-    model_names: list[str] | None = None
-
-
-class Highlight(BaseModel):
-    text: str
-    type: str
-    start: int
-    end: int
+class ModerationLayerResponse(BaseModel):
+    layer: str
+    task: str
+    model: str
+    input_text: str
+    pred_id: int
+    label: str
+    confidence: float
+    probabilities: dict[str, float]
+    is_warning: bool
 
 
 class ModerateResponse(BaseModel):
-    label: str
-    toxicityScore: float
-    categories: list[str]
-    message: str
-    highlights: list[Highlight]
-    suggestion: str
+    text: str
+    final_label: str
+    final_confidence: float
+    is_warning: bool
+    action: str
+    layers: list[ModerationLayerResponse]
     model: str
 
 
-class PredictResponse(BaseModel):
-    model_config = ConfigDict(protected_namespaces=())
+class HealthResponse(BaseModel):
+    status: str
+    device: str
 
-    input_text: str
-    model_name: str
-    model_dir: str
-    model_source: str
-    predicted_label_id: int
-    predicted_label_name: str
-    p_clean: float
-    p_offensive: float
-    p_hate: float
-    toxic_prob: float
-    toxic_severity_score: float
-    moderation_status: str
+
+class RootResponse(BaseModel):
+    service: str
+    status: str
+    device: str
+    layer_1_model: str
+    layer_2_model: str

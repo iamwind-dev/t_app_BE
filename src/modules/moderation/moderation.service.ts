@@ -2,11 +2,12 @@ import { AxiosError } from 'axios';
 import { Injectable, Logger } from '@nestjs/common';
 import {
   defaultModerationFallback,
+  moderationLabelToStatus,
   moderationStatusToVisibility,
 } from './moderation.constants';
 import {
-  ModerationLabel,
   ModerationResult,
+  PersistedModerationStatus,
   VisibilityLevel,
 } from './interfaces/moderation-result.interface';
 import { ModerationProvider } from './moderation.provider';
@@ -22,13 +23,7 @@ export class ModerationService {
     if (!normalized) {
       return {
         ...defaultModerationFallback,
-        label: 'SAFE',
-        toxicityScore: 0,
-        categories: [],
-        message: 'No text content.',
-        highlights: [],
-        suggestion: '',
-        model: 'fallback',
+        text: normalized,
       };
     }
 
@@ -45,30 +40,68 @@ export class ModerationService {
 
       return {
         ...defaultModerationFallback,
-        categories: [...defaultModerationFallback.categories],
-        highlights: [...defaultModerationFallback.highlights],
+        text: normalized,
       };
     }
   }
 
-  toVisibilityLevel(label: ModerationLabel): VisibilityLevel {
-    return moderationStatusToVisibility[label];
+  toVisibilityLevel(status: PersistedModerationStatus): VisibilityLevel {
+    return moderationStatusToVisibility[status];
   }
 
   private normalizeResult(result: ModerationResult): ModerationResult {
-    const label: ModerationLabel =
-      result.label === 'SAFE' || result.label === 'WARNING' || result.label === 'RESTRICTED'
-        ? result.label
-        : 'WARNING';
+    const finalLabel =
+      result.final_label === 'clean' ||
+      result.final_label === 'offensive' ||
+      result.final_label === 'hate' ||
+      result.final_label === 'discrimination' ||
+      result.final_label === 'supportive' ||
+      result.final_label === 'other'
+        ? result.final_label
+        : 'clean';
+    const action =
+      result.action === 'ALLOW' ||
+      result.action === 'WARN_USER' ||
+      result.action === 'BLOCK_OR_REVIEW'
+        ? result.action
+        : 'WARN_USER';
+    const status =
+      result.status === 'APPROVED' ||
+      result.status === 'WARNING' ||
+      result.status === 'FLAGGED' ||
+      result.status === 'AI_UNAVAILABLE'
+        ? result.status
+        : moderationLabelToStatus[finalLabel];
 
     return {
-      label,
-      toxicityScore: Number.isFinite(result.toxicityScore) ? result.toxicityScore : 0.5,
-      categories: Array.isArray(result.categories) ? result.categories : ['ai_unavailable'],
-      message: result.message || '',
-      highlights: Array.isArray(result.highlights) ? result.highlights : [],
-      suggestion: result.suggestion || '',
-      model: result.model || 'fallback',
+      text: result.text ?? '',
+      final_label: finalLabel,
+      final_confidence: Number.isFinite(result.final_confidence) ? result.final_confidence : 0,
+      is_warning: Boolean(result.is_warning),
+      action,
+      layers: Array.isArray(result.layers)
+        ? result.layers.map((layer) => ({
+            layer: layer.layer,
+            task: layer.task ?? 'unknown',
+            model: layer.model ?? 'unknown',
+            input_text: layer.input_text,
+            pred_id: layer.pred_id,
+            label: layer.label,
+            confidence: Number.isFinite(layer.confidence) ? layer.confidence : 0,
+            probabilities: layer.probabilities ?? {},
+            is_warning: Boolean(layer.is_warning),
+          }))
+        : [],
+      status,
+      model:
+        result.model ||
+        (Array.isArray(result.layers)
+          ? result.layers
+              .map((layer) => layer.model)
+              .filter((model): model is string => typeof model === 'string' && model.length > 0)
+              .join(',')
+          : '') ||
+        'fallback',
     };
   }
 
