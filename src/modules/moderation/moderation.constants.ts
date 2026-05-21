@@ -1,17 +1,36 @@
-export const AI_MODERATION_HTTP_CLIENT = 'AI_MODERATION_HTTP_CLIENT';
+import {
+  ModerationLabel,
+  ModerationResult,
+  PersistedModerationStatus,
+  VisibilityLevel,
+} from './interfaces/moderation-result.interface';
 
-export const moderationStatusToVisibility = {
-  SAFE: 'NORMAL',
+export const moderationLabelToStatus: Record<
+  ModerationLabel,
+  Exclude<PersistedModerationStatus, 'AI_UNAVAILABLE'>
+> = {
+  clean: 'APPROVED',
+  offensive: 'WARNING',
+  discrimination: 'FLAGGED',
+  hate: 'FLAGGED',
+  supportive: 'APPROVED',
+  other: 'APPROVED',
+};
+
+export const moderationStatusToVisibility: Record<PersistedModerationStatus, VisibilityLevel> = {
+  APPROVED: 'NORMAL',
   WARNING: 'LIMITED',
-  RESTRICTED: 'COLLAPSED',
-} as const;
+  FLAGGED: 'COLLAPSED',
+  AI_UNAVAILABLE: 'NORMAL',
+};
 
-export const defaultModerationFallback = {
-  label: 'WARNING',
-  toxicityScore: 0.5,
-  categories: ['ai_unavailable'],
-  message: 'AI moderation service is currently unavailable.',
-  highlights: [],
-  suggestion: 'Please review your content wording.',
+export const defaultModerationFallback: ModerationResult = {
+  text: '',
+  final_label: 'clean',
+  final_confidence: 0,
+  is_warning: false,
+  action: 'ALLOW',
+  layers: [],
+  status: 'AI_UNAVAILABLE',
   model: 'fallback',
-} as const;
+};

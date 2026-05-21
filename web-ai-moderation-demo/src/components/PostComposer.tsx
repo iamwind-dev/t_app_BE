@@ -12,13 +12,16 @@ interface Props {
 }
 
 const emptyModeration: ModerationResult = {
-  label: 'SAFE',
-  toxicityScore: 0,
+  label: 'clean',
+  finalLabel: 'clean',
+  finalConfidence: 0,
+  action: 'ALLOW',
+  isWarning: false,
   categories: [],
   message: 'Nhap noi dung de bat dau kiem tra.',
-  highlights: [],
   suggestion: '',
-  model: 'mask_partial_char',
+  model: 'pending',
+  layers: [],
   visibilityLevel: 'NORMAL',
   shouldBlurContent: false,
   moderationDisplayText: 'Noi dung co tu ngu gay kho chiu.',
@@ -49,7 +52,7 @@ export function PostComposer({ onSubmit, onNeedConfirm }: Props): JSX.Element {
   const handlePost = () => {
     const text = content.trim();
     if (!text) return;
-    if (moderation.label === 'SAFE') {
+    if (moderation.action === 'ALLOW') {
       onSubmit(text, moderation);
       setContent('');
       return;
@@ -78,17 +81,18 @@ export function PostComposer({ onSubmit, onNeedConfirm }: Props): JSX.Element {
         <span className="meta">{checking ? 'Dang kiem tra AI...' : moderation.model}</span>
       </div>
 
-      <ToxicityMeter score={moderation.toxicityScore} />
+      <ToxicityMeter score={moderation.finalConfidence} />
 
       <div className="card sub-card">
         <p className="sub-title">Preview highlight</p>
-        <HighlightedText text={content} highlights={moderation.highlights} />
+        <HighlightedText text={content} highlights={[]} />
         <p className="meta">{moderation.message}</p>
       </div>
 
       <div className="card sub-card">
         <p className="sub-title">AI explanation</p>
         <p>{moderation.categories.length ? moderation.categories.join(', ') : 'safe'}</p>
+        <p className="meta">Action: {moderation.action}</p>
         {moderation.backendUnavailable && (
           <p className="small-warning">Khong the kiem tra AI luc nay</p>
         )}

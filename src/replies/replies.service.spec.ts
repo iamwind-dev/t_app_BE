@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ModerationService } from '../modules/moderation/moderation.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
@@ -7,6 +8,7 @@ import { RepliesService } from './replies.service';
 type MockTransactionClient = {
   reply: {
     create: jest.Mock;
+    update: jest.Mock;
   };
   post: {
     update: jest.Mock;
@@ -20,7 +22,9 @@ type MockPrismaService = {
   };
   reply: {
     create: jest.Mock;
+    findFirst: jest.Mock;
     findMany: jest.Mock;
+    update: jest.Mock;
   };
   $transaction: jest.Mock;
 };
@@ -34,6 +38,9 @@ describe('RepliesService', () => {
   let uploadsService: {
     syncAttachedUploads: jest.Mock;
     markResourceUploadsOrphaned: jest.Mock;
+  };
+  let moderationService: {
+    moderateText: jest.Mock;
   };
 
   const userId = '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
@@ -56,6 +63,12 @@ describe('RepliesService', () => {
     likeCount: 0,
     childReplyCount: 0,
     moderationStatus: 'APPROVED',
+    moderationLabel: 'clean',
+    moderationConfidence: 0.97,
+    moderationAction: 'ALLOW',
+    moderationIsWarning: false,
+    moderationModel: 'iamwindd/vihsd-visobert',
+    aiReviewedAt: createdAt,
     createdAt,
     updatedAt: createdAt,
     author,
@@ -66,6 +79,7 @@ describe('RepliesService', () => {
     const tx: MockTransactionClient = {
       reply: {
         create: jest.fn(),
+        update: jest.fn(),
       },
       post: {
         update: jest.fn(),
@@ -79,7 +93,9 @@ describe('RepliesService', () => {
       },
       reply: {
         create: tx.reply.create,
+        findFirst: jest.fn(),
         findMany: jest.fn(),
+        update: tx.reply.update,
       },
       $transaction: jest.fn((callback: (client: MockTransactionClient) => unknown) =>
         Promise.resolve(callback(tx)),
@@ -93,11 +109,24 @@ describe('RepliesService', () => {
       syncAttachedUploads: jest.fn(),
       markResourceUploadsOrphaned: jest.fn(),
     };
+    moderationService = {
+      moderateText: jest.fn().mockResolvedValue({
+        text: 'Hello reply',
+        final_label: 'clean',
+        final_confidence: 0.97,
+        is_warning: false,
+        action: 'ALLOW',
+        layers: [],
+        status: 'APPROVED',
+        model: 'iamwindd/vihsd-visobert',
+      }),
+    };
 
     service = new RepliesService(
       prisma as unknown as PrismaService,
       notificationsService as unknown as NotificationsService,
       uploadsService as unknown as UploadsService,
+      moderationService as unknown as ModerationService,
     );
   });
 
@@ -122,6 +151,24 @@ describe('RepliesService', () => {
         content: 'Hello reply',
         mediaUrls: [],
         moderationStatus: 'APPROVED',
+        moderationScore: 0.97,
+        moderationReason: 'clean',
+        moderationLabel: 'clean',
+        moderationConfidence: 0.97,
+        moderationAction: 'ALLOW',
+        moderationIsWarning: false,
+        moderationModel: 'iamwindd/vihsd-visobert',
+        moderationRaw: {
+          text: 'Hello reply',
+          final_label: 'clean',
+          final_confidence: 0.97,
+          is_warning: false,
+          action: 'ALLOW',
+          layers: [],
+          status: 'APPROVED',
+          model: 'iamwindd/vihsd-visobert',
+        },
+        aiReviewedAt: expect.any(Date),
       },
       include: expect.any(Object),
     });
@@ -154,8 +201,24 @@ describe('RepliesService', () => {
       likeCount: 0,
       childReplyCount: 0,
       moderationStatus: 'approved',
+      moderationLabel: 'clean',
+      moderationConfidence: 0.97,
+      moderationAction: 'ALLOW',
+      moderationIsWarning: false,
+      moderationModel: 'iamwindd/vihsd-visobert',
+      aiReviewedAt: createdAt,
       createdAt,
       isLikedByMe: false,
+    });
+    expect(result.moderation).toEqual({
+      text: 'Hello reply',
+      final_label: 'clean',
+      final_confidence: 0.97,
+      is_warning: false,
+      action: 'ALLOW',
+      layers: [],
+      status: 'APPROVED',
+      model: 'iamwindd/vihsd-visobert',
     });
   });
 

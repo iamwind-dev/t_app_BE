@@ -12,8 +12,8 @@ import { ModerationService } from './moderation.service';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        baseURL: configService.get<string>('AI_MODERATION_BASE_URL', 'http://localhost:8000'),
-        timeout: configService.get<number>('AI_MODERATION_TIMEOUT_MS', 5000),
+        baseURL: configService.get<string>('AI_SERVICE_URL', 'http://localhost:8000'),
+        timeout: configService.get<number>('AI_SERVICE_TIMEOUT_MS', 8000),
       }),
     }),
   ],
