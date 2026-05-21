@@ -1,4 +1,6 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
@@ -35,6 +37,12 @@ type MockPrismaService = {
   post: {
     findMany: jest.Mock;
   };
+  domainEventOutbox: {
+    create: jest.Mock;
+    update: jest.Mock;
+    findFirst: jest.Mock;
+    findMany: jest.Mock;
+  };
   $transaction: jest.Mock;
 };
 
@@ -44,6 +52,13 @@ describe('UsersService', () => {
   let uploadsService: {
     syncAttachedUploads: jest.Mock;
     markResourceUploadsOrphaned: jest.Mock;
+  };
+  let domainEventsService: {
+    createEvent: jest.Mock;
+    markPublished: jest.Mock;
+  };
+  let realtimeEventsService: {
+    publish: jest.Mock;
   };
 
   const user: MockUser = {
@@ -79,11 +94,18 @@ describe('UsersService', () => {
       post: {
         findMany: jest.fn(),
       },
+      domainEventOutbox: {
+        create: jest.fn(),
+        update: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn(),
+      },
       $transaction: jest.fn(async (callback: unknown) => {
         if (typeof callback === 'function') {
           return callback({
             follow: prisma.follow,
             user: prisma.user,
+            domainEventOutbox: prisma.domainEventOutbox,
           });
         }
 
@@ -95,10 +117,28 @@ describe('UsersService', () => {
       syncAttachedUploads: jest.fn(),
       markResourceUploadsOrphaned: jest.fn(),
     };
+    domainEventsService = {
+      createEvent: jest.fn().mockResolvedValue({
+        eventId: 'event-id',
+        type: 'user.profile.updated',
+        occurredAt: new Date().toISOString(),
+        actorId: user.id,
+        subjectType: 'USER',
+        subjectId: user.id,
+        rooms: [`user:${user.id}`, 'feed:global'],
+        payload: {},
+      }),
+      markPublished: jest.fn().mockResolvedValue(undefined),
+    };
+    realtimeEventsService = {
+      publish: jest.fn(),
+    };
 
     service = new UsersService(
       prisma as unknown as PrismaService,
       uploadsService as unknown as UploadsService,
+      domainEventsService as unknown as DomainEventsService,
+      realtimeEventsService as unknown as RealtimeEventsService,
     );
   });
 
@@ -182,6 +222,9 @@ describe('UsersService', () => {
         bio: 'New bio',
       },
     });
+    expect(domainEventsService.createEvent).toHaveBeenCalled();
+    expect(realtimeEventsService.publish).toHaveBeenCalled();
+    expect(domainEventsService.markPublished).toHaveBeenCalledWith('event-id');
     expect(result.username).toBe('new_user');
     expect(result.displayName).toBe('New Name');
     expect(result.bio).toBe('New bio');

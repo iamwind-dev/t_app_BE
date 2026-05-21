@@ -4,6 +4,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserPostsQueryDto } from './dto/user-posts-query.dto';
@@ -42,11 +44,22 @@ interface UserPostRecord {
   };
 }
 
+interface UsersTransactionClient {
+  user: {
+    update(args: unknown): Promise<unknown>;
+  };
+  domainEventOutbox: {
+    create(args: unknown): Promise<unknown>;
+  };
+}
+
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
+    private readonly domainEventsService: DomainEventsService,
+    private readonly realtimeEventsService: RealtimeEventsService,
   ) {}
 
   async getProfileById(id: string, currentUserId?: string): Promise<PublicUserProfile> {
@@ -121,10 +134,37 @@ export class UsersService {
     }
 
     try {
-      const updatedUser = (await this.prisma.user.update({
-        where: { id: userId },
-        data,
-      })) as UserRecord;
+      const { updatedUser, profileUpdatedEvent } = await this.prisma.$transaction(async (tx) => {
+        const client = tx as unknown as UsersTransactionClient;
+        const nextUser = (await client.user.update({
+          where: { id: userId },
+          data,
+        })) as UserRecord;
+
+        const event = await this.domainEventsService.createEvent(
+          {
+            type: 'user.profile.updated',
+            actorId: userId,
+            subjectType: 'USER',
+            subjectId: userId,
+            rooms: [`user:${userId}`, 'feed:global'],
+            payload: {
+              userId: nextUser.id,
+              displayName: nextUser.displayName,
+              avatarUrl: nextUser.avatarUrl,
+              bio: nextUser.bio,
+              updatedAt: nextUser.updatedAt.toISOString(),
+              version: nextUser.updatedAt.toISOString(),
+            },
+          },
+          client,
+        );
+
+        return {
+          updatedUser: nextUser,
+          profileUpdatedEvent: event,
+        };
+      });
 
       if (data.avatarUrl !== undefined) {
         if (data.avatarUrl) {
@@ -142,6 +182,13 @@ export class UsersService {
             attachedToId: userId,
           });
         }
+      }
+
+      try {
+        this.realtimeEventsService.publish(profileUpdatedEvent);
+        await this.domainEventsService.markPublished(profileUpdatedEvent.eventId);
+      } catch {
+        // Keep the profile update successful even when realtime delivery tracking fails.
       }
 
       return this.toPublicProfile(updatedUser, userId);

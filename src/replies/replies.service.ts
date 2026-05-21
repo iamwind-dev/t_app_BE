@@ -1,4 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
+import { DomainEventEnvelope } from '../domain-events/types/domain-event.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ModerationService } from '../modules/moderation/moderation.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -69,6 +72,9 @@ interface TransactionClient {
   post: {
     update(args: unknown): Promise<{ replyCount: number }>;
   };
+  domainEventOutbox: {
+    create(args: unknown): Promise<unknown>;
+  };
 }
 
 @Injectable()
@@ -77,7 +83,12 @@ export class RepliesService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly uploadsService: UploadsService,
+
+    private readonly domainEventsService?: DomainEventsService,
+    private readonly realtimeEventsService?: RealtimeEventsService,
+
     private readonly moderationService: ModerationService,
+
   ) {}
 
   async createPostReply(
@@ -189,11 +200,31 @@ export class RepliesService {
       data.mediaUrls !== undefined ? data.mediaUrls : existingReply.mediaUrls;
     this.assertReplyHasContentOrMedia(finalContent, finalMediaUrls);
 
-    const updatedReply = (await this.prisma.reply.update({
-      where: { id: replyId },
-      data,
-      include: this.replyInclude(currentUserId),
-    })) as ReplyRecord;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
+      const updatedReply = (await client.reply.update({
+        where: { id: replyId },
+        data,
+        include: this.replyInclude(currentUserId),
+      })) as ReplyRecord;
+
+      const event = await this.createOutboxEvent(
+        {
+          type: 'reply.updated',
+          actorId: currentUserId,
+          subjectType: 'REPLY',
+          subjectId: updatedReply.id,
+          rooms: [`thread:${updatedReply.postId}`, `user:${currentUserId}`],
+          payload: {
+            reply: this.toReplyResponseItem(updatedReply),
+          },
+        },
+        client,
+      );
+
+      return { updatedReply, event };
+    });
+    const updatedReply = result.updatedReply;
 
     if (data.mediaUrls !== undefined) {
       await this.uploadsService.syncAttachedUploads({
@@ -205,6 +236,8 @@ export class RepliesService {
       });
     }
 
+    await this.publishEvent(result.event);
+
     return { reply: this.toReplyResponseItem(updatedReply) };
   }
 
@@ -213,7 +246,7 @@ export class RepliesService {
     this.assertReplyOwnership(currentUserId, existingReply.authorId);
 
     const deletedAt = new Date();
-    await this.prisma.$transaction(async (tx) => {
+    const event = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
       await client.reply.update({
         where: { id: replyId },
@@ -234,6 +267,22 @@ export class RepliesService {
           select: { childReplyCount: true },
         });
       }
+
+      return this.createOutboxEvent(
+        {
+          type: 'reply.deleted',
+          actorId: currentUserId,
+          subjectType: 'REPLY',
+          subjectId: replyId,
+          rooms: [`thread:${existingReply.postId}`, `user:${currentUserId}`],
+          payload: {
+            id: replyId,
+            postId: existingReply.postId,
+            deletedAt: deletedAt.toISOString(),
+          },
+        },
+        client,
+      );
     });
 
     await this.uploadsService.markResourceUploadsOrphaned({
@@ -241,6 +290,8 @@ export class RepliesService {
       attachedToType: 'reply',
       attachedToId: replyId,
     });
+
+    await this.publishEvent(event);
 
     return {
       deleted: true,
@@ -264,7 +315,7 @@ export class RepliesService {
     const moderation = await this.moderationService.moderateText(content ?? '');
     const aiReviewedAt = new Date();
 
-    const reply = await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
       const createdReply = await client.reply.create({
         data: {
@@ -301,8 +352,23 @@ export class RepliesService {
         });
       }
 
-      return createdReply;
+      const event = await this.createOutboxEvent(
+        {
+          type: 'reply.created',
+          actorId: input.currentUserId,
+          subjectType: 'REPLY',
+          subjectId: createdReply.id,
+          rooms: [`thread:${input.postId}`, `user:${input.currentUserId}`],
+          payload: {
+            reply: this.toReplyResponseItem(createdReply),
+          },
+        },
+        client,
+      );
+
+      return { reply: createdReply, event };
     });
+    const reply = result.reply;
 
     await this.uploadsService.syncAttachedUploads({
       ownerId: input.currentUserId,
@@ -322,10 +388,15 @@ export class RepliesService {
       });
     }
 
+
+    await this.publishEvent(result.event);
+
+
     return {
       reply: this.toReplyResponseItem(reply),
       moderation,
     };
+
   }
 
   private async listReplies(input: {
@@ -564,5 +635,36 @@ export class RepliesService {
         },
       },
     };
+  }
+
+  private async createOutboxEvent(
+    input: {
+    type: string;
+    actorId: string;
+    subjectType: string;
+    subjectId: string;
+    rooms: string[];
+    payload: unknown;
+    },
+    tx: TransactionClient,
+  ): Promise<DomainEventEnvelope | null> {
+    if (!this.domainEventsService) {
+      return null;
+    }
+
+    return this.domainEventsService.createEvent(input, tx);
+  }
+
+  private async publishEvent(event: DomainEventEnvelope | null): Promise<void> {
+    if (!event || !this.domainEventsService || !this.realtimeEventsService) {
+      return;
+    }
+
+    try {
+      this.realtimeEventsService.publish(event);
+      await this.domainEventsService.markPublished(event.eventId);
+    } catch {
+      return;
+    }
   }
 }

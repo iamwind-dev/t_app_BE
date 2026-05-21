@@ -99,7 +99,7 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const userId = this.requireSocketUser(client);
       await this.chatService.assertConversationMember(userId, dto.conversationId);
-      await client.join(this.getConversationRoom(dto.conversationId));
+      await this.joinConversationRooms(client, dto.conversationId);
       this.ackSuccess(ack, {
         conversationId: dto.conversationId,
         joined: true,
@@ -129,7 +129,7 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const userId = this.requireSocketUser(client);
       await this.chatService.assertConversationMember(userId, dto.conversationId);
-      await client.leave(this.getConversationRoom(dto.conversationId));
+      await this.leaveConversationRooms(client, dto.conversationId);
       this.ackSuccess(ack, {
         conversationId: dto.conversationId,
         left: true,
@@ -153,7 +153,7 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const userId = this.requireSocketUser(client);
       const result = await this.chatService.sendTextMessage(userId, dto);
-      client.to(this.getConversationRoom(dto.conversationId)).emit('new_message', {
+      this.emitToConversationRooms(dto.conversationId, 'new_message', {
         conversationId: dto.conversationId,
         message: result.message,
       });
@@ -184,7 +184,7 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const userId = this.requireSocketUser(client);
       await this.chatService.assertConversationMember(userId, dto.conversationId);
-      client.to(this.getConversationRoom(dto.conversationId)).emit('user_typing_start', {
+      this.emitToConversationRooms(dto.conversationId, 'user_typing_start', {
         conversationId: dto.conversationId,
         userId,
         occurredAt: new Date().toISOString(),
@@ -212,7 +212,7 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const userId = this.requireSocketUser(client);
       await this.chatService.assertConversationMember(userId, dto.conversationId);
-      client.to(this.getConversationRoom(dto.conversationId)).emit('user_typing_stop', {
+      this.emitToConversationRooms(dto.conversationId, 'user_typing_stop', {
         conversationId: dto.conversationId,
         userId,
         occurredAt: new Date().toISOString(),
@@ -240,7 +240,7 @@ export class ChatGateway implements OnGatewayConnection {
     try {
       const userId = this.requireSocketUser(client);
       const result = await this.chatService.markSeen(userId, dto);
-      this.server.to(this.getConversationRoom(dto.conversationId)).emit('message_seen', result);
+      this.emitToConversationRooms(dto.conversationId, 'message_seen', result);
       this.ackSuccess(ack, result);
     } catch (error) {
       this.ackError(ack, client, this.toSocketError(error), 'mark_seen');
@@ -308,6 +308,51 @@ export class ChatGateway implements OnGatewayConnection {
 
   private getConversationRoom(conversationId: string): string {
     return `conversation:${conversationId}`;
+  }
+
+  private getChatRoom(conversationId: string): string {
+    return `chat:${conversationId}`;
+  }
+
+  private getConversationRooms(conversationId: string): string[] {
+    if (this.isLegacyConversationRoomEnabled()) {
+      return [this.getChatRoom(conversationId), this.getConversationRoom(conversationId)];
+    }
+
+    return [this.getChatRoom(conversationId)];
+  }
+
+  private isLegacyConversationRoomEnabled(): boolean {
+    const raw = process.env.CHAT_ENABLE_LEGACY_CONVERSATION_ROOM;
+    if (!raw) {
+      return true;
+    }
+
+    return raw.toLowerCase() !== 'false';
+  }
+
+  private async joinConversationRooms(
+    client: AuthenticatedSocket,
+    conversationId: string,
+  ): Promise<void> {
+    await Promise.all(this.getConversationRooms(conversationId).map((room) => client.join(room)));
+  }
+
+  private async leaveConversationRooms(
+    client: AuthenticatedSocket,
+    conversationId: string,
+  ): Promise<void> {
+    await Promise.all(this.getConversationRooms(conversationId).map((room) => client.leave(room)));
+  }
+
+  private emitToConversationRooms(
+    conversationId: string,
+    eventName: string,
+    payload: unknown,
+  ): void {
+    for (const room of this.getConversationRooms(conversationId)) {
+      this.server.to(room).emit(eventName, payload);
+    }
   }
 
   private ackSuccess(ack: SocketAck | undefined, data: unknown): void {

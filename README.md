@@ -55,6 +55,8 @@ UPLOAD_MAX_IMAGE_SIZE_BYTES=5242880
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
+CHAT_ENABLE_LEGACY_CONVERSATION_ROOM=true
+INTERNAL_OPS_TOKEN=
 ```
 
 Luu y:
@@ -62,7 +64,10 @@ Luu y:
 - `DATABASE_URL` phai tro dung toi PostgreSQL.
 - `JWT_ACCESS_SECRET` can doi sang secret rieng, khong dung gia tri mau.
 - Neu dang chay local upload, nen dung `UPLOAD_PUBLIC_BASE_URL=http://localhost:3000/uploads`.
+- Tren staging/production, `UPLOAD_PUBLIC_BASE_URL` phai la URL public (khong duoc dung `localhost`).
 - `.env` da nam trong `.gitignore`, khong commit file nay.
+- `CHAT_ENABLE_LEGACY_CONVERSATION_ROOM=true` de tuong thich FE cu; set `false` sau khi FE migrate room chat xong.
+- `INTERNAL_OPS_TOKEN` dung de bao ve endpoint noi bo `/sync/outbox/*`.
 
 ## 3. Chuan bi database
 
@@ -75,13 +80,14 @@ npm run prisma:validate
 Generate Prisma Client:
 
 ```bash
+
 npm run prisma:generate
 ```
 
 Chay migration cho moi truong local:
 
 ```bash
-npm run prisma:migrate:dev
+npm run prisma:generate
 ```
 
 Neu database da co schema san roi, van nen chay `prisma:generate` truoc khi start app.
@@ -100,7 +106,10 @@ Production build:
 npm run build
 npm run start:prod
 ```
-
+npm run prisma:validate
+npm run prisma:generate
+npm run prisma:migrate:dev
+npm run start:dev
 Mac dinh server chay tai:
 
 ```text
@@ -175,6 +184,11 @@ prisma/
   migrations/
 test/
 ```
+
+## Realtime Contract
+
+- Realtime spec for FE/BE integration:
+  - `docs/realtime-contract.md`
 
 ## 9. Troubleshooting
 

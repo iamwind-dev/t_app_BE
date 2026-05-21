@@ -11,7 +11,13 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { ModerationService } from '../modules/moderation/moderation.service';
+
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
+import { DomainEventEnvelope } from '../domain-events/types/domain-event.type';
+
 import { ModerationResult } from '../modules/moderation/interfaces/moderation-result.interface';
+
 
 interface PostRecord {
   id: string;
@@ -60,6 +66,9 @@ interface TransactionClient {
     update(args: unknown): Promise<unknown>;
     updateMany(args: unknown): Promise<{ count: number }>;
   };
+  domainEventOutbox: {
+    create(args: unknown): Promise<unknown>;
+  };
 }
 
 @Injectable()
@@ -68,6 +77,8 @@ export class PostsService {
     private readonly prisma: PrismaService,
     private readonly uploadsService: UploadsService,
     private readonly moderationService: ModerationService,
+    private readonly domainEventsService?: DomainEventsService,
+    private readonly realtimeEventsService?: RealtimeEventsService,
   ) {}
 
   async createPost(userId: string, dto: CreatePostDto): Promise<PostResponse> {
@@ -79,7 +90,7 @@ export class PostsService {
     const visibilityLevel = this.moderationService.toVisibilityLevel(moderation.status);
     const aiReviewedAt = new Date();
 
-    const post = (await this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
 
       const createdPost = await client.post.create({
@@ -116,8 +127,26 @@ export class PostsService {
         },
       });
 
-      return createdPost;
-    })) as PostRecord;
+      const event = await this.createOutboxEvent(
+        {
+          type: 'post.created',
+          actorId: userId,
+          subjectType: 'POST',
+          subjectId: (createdPost as PostRecord).id,
+          rooms: ['feed:global', `user:${userId}`, `thread:${(createdPost as PostRecord).id}`],
+          payload: {
+            post: this.toPostResponseItem(createdPost as PostRecord),
+          },
+        },
+        client,
+      );
+
+      return {
+        post: createdPost as PostRecord,
+        event,
+      };
+    });
+    const post = result.post;
 
     await this.uploadsService.syncAttachedUploads({
       ownerId: userId,
@@ -126,6 +155,8 @@ export class PostsService {
       attachedToType: 'post',
       attachedToId: post.id,
     });
+
+    await this.publishEvent(result.event);
 
     return {
       post: this.toPostResponseItem(post),
@@ -190,11 +221,31 @@ export class PostsService {
     const finalMediaUrls = data.mediaUrls !== undefined ? data.mediaUrls : existingPost.mediaUrls;
     this.assertPostHasContentOrMedia(finalContent, finalMediaUrls);
 
-    const updatedPost = (await this.prisma.post.update({
-      where: { id: postId },
-      data,
-      include: this.postInclude(userId),
-    })) as PostRecord;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
+      const updatedPost = (await client.post.update({
+        where: { id: postId },
+        data,
+        include: this.postInclude(userId),
+      })) as PostRecord;
+
+      const event = await this.createOutboxEvent(
+        {
+          type: 'post.updated',
+          actorId: userId,
+          subjectType: 'POST',
+          subjectId: updatedPost.id,
+          rooms: ['feed:global', `user:${userId}`, `thread:${updatedPost.id}`],
+          payload: {
+            post: this.toPostResponseItem(updatedPost),
+          },
+        },
+        client,
+      );
+
+      return { updatedPost, event };
+    });
+    const updatedPost = result.updatedPost;
 
     if (data.mediaUrls !== undefined) {
       await this.uploadsService.syncAttachedUploads({
@@ -205,6 +256,8 @@ export class PostsService {
         attachedToId: postId,
       });
     }
+
+    await this.publishEvent(result.event);
 
     return {
       post: this.toPostResponseItem(updatedPost),
@@ -222,7 +275,7 @@ export class PostsService {
     }
 
     const deletedAt = new Date();
-    await this.prisma.$transaction(async (tx) => {
+    const event = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
 
       await client.post.update({
@@ -243,6 +296,21 @@ export class PostsService {
           },
         },
       });
+
+      return this.createOutboxEvent(
+        {
+          type: 'post.deleted',
+          actorId: userId,
+          subjectType: 'POST',
+          subjectId: postId,
+          rooms: ['feed:global', `user:${userId}`, `thread:${postId}`],
+          payload: {
+            id: postId,
+            deletedAt: deletedAt.toISOString(),
+          },
+        },
+        client,
+      );
     });
 
     await this.uploadsService.markResourceUploadsOrphaned({
@@ -250,6 +318,8 @@ export class PostsService {
       attachedToType: 'post',
       attachedToId: postId,
     });
+
+    await this.publishEvent(event);
 
     return {
       deleted: true,
@@ -379,5 +449,36 @@ export class PostsService {
         },
       },
     };
+  }
+
+  private async createOutboxEvent(
+    input: {
+    type: string;
+    actorId: string;
+    subjectType: string;
+    subjectId: string;
+    rooms: string[];
+    payload: unknown;
+    },
+    tx: TransactionClient,
+  ): Promise<DomainEventEnvelope | null> {
+    if (!this.domainEventsService) {
+      return null;
+    }
+
+    return this.domainEventsService.createEvent(input, tx);
+  }
+
+  private async publishEvent(event: DomainEventEnvelope | null): Promise<void> {
+    if (!event || !this.domainEventsService || !this.realtimeEventsService) {
+      return;
+    }
+
+    try {
+      this.realtimeEventsService.publish(event);
+      await this.domainEventsService.markPublished(event.eventId);
+    } catch {
+      return;
+    }
   }
 }

@@ -1,4 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { DomainEventsService } from '../domain-events/domain-events.service';
+import { RealtimeEventsService } from '../domain-events/realtime-events.service';
+import { DomainEventEnvelope } from '../domain-events/types/domain-event.type';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PostReactionResponse, ReplyReactionResponse } from './types/reaction-response.type';
@@ -30,6 +33,9 @@ interface TransactionClient {
     updateMany(args: unknown): Promise<{ count: number }>;
     findUnique(args: unknown): Promise<{ likeCount: number } | null>;
   };
+  domainEventOutbox: {
+    create(args: unknown): Promise<unknown>;
+  };
 }
 
 @Injectable()
@@ -37,13 +43,15 @@ export class ReactionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly domainEventsService?: DomainEventsService,
+    private readonly realtimeEventsService?: RealtimeEventsService,
   ) {}
 
   async likePost(userId: string, postId: string): Promise<PostReactionResponse> {
     const post = await this.findActivePost(postId);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const client = tx as TransactionClient;
+      const client = tx as unknown as TransactionClient;
       const existingReaction = await client.postReaction.findUnique({
         where: {
           postId_userId_type: {
@@ -81,6 +89,22 @@ export class ReactionsService {
         likeCount: updatedPost.likeCount,
         isLiked: true,
         notificationSourceId: createdReaction.id,
+        event: await this.createOutboxEvent(
+          {
+            type: 'reaction.created',
+            actorId: userId,
+            subjectType: 'POST',
+            subjectId: postId,
+            rooms: [`thread:${postId}`, `user:${userId}`, `user:${post.authorId}`],
+            payload: {
+              targetType: 'POST',
+              targetId: postId,
+              likeCount: updatedPost.likeCount,
+              isLiked: true,
+            },
+          },
+          client,
+        ),
       };
     });
 
@@ -93,6 +117,8 @@ export class ReactionsService {
         sourceType: 'POST_REACTION',
         sourceId: result.notificationSourceId,
       });
+
+      await this.publishEvent(result.event ?? null);
     }
 
     return {
@@ -105,8 +131,8 @@ export class ReactionsService {
   async unlikePost(userId: string, postId: string): Promise<PostReactionResponse> {
     await this.findActivePost(postId);
 
-    return this.prisma.$transaction(async (tx) => {
-      const client = tx as TransactionClient;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
       const reactionWhere = {
         postId_userId_type: {
           postId,
@@ -155,19 +181,43 @@ export class ReactionsService {
         select: { likeCount: true },
       });
 
+      const likeCount = updatedPost?.likeCount ?? 0;
       return {
         postId,
-        likeCount: updatedPost?.likeCount ?? 0,
+        likeCount,
         isLiked: false,
+        event: await this.createOutboxEvent(
+          {
+            type: 'reaction.deleted',
+            actorId: userId,
+            subjectType: 'POST',
+            subjectId: postId,
+            rooms: [`thread:${postId}`, `user:${userId}`],
+            payload: {
+              targetType: 'POST',
+              targetId: postId,
+              likeCount,
+              isLiked: false,
+            },
+          },
+          client,
+        ),
       };
     });
+    await this.publishEvent(result.event ?? null);
+
+    return {
+      postId: result.postId,
+      likeCount: result.likeCount,
+      isLiked: result.isLiked,
+    };
   }
 
   async likeReply(userId: string, replyId: string): Promise<ReplyReactionResponse> {
     const reply = await this.findActiveReply(replyId);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      const client = tx as TransactionClient;
+      const client = tx as unknown as TransactionClient;
       const existingReaction = await client.replyReaction.findUnique({
         where: {
           replyId_userId_type: {
@@ -205,6 +255,22 @@ export class ReactionsService {
         likeCount: updatedReply.likeCount,
         isLiked: true,
         notificationSourceId: createdReaction.id,
+        event: await this.createOutboxEvent(
+          {
+            type: 'reaction.created',
+            actorId: userId,
+            subjectType: 'REPLY',
+            subjectId: replyId,
+            rooms: [`thread:${replyId}`, `user:${userId}`, `user:${reply.authorId}`],
+            payload: {
+              targetType: 'REPLY',
+              targetId: replyId,
+              likeCount: updatedReply.likeCount,
+              isLiked: true,
+            },
+          },
+          client,
+        ),
       };
     });
 
@@ -217,6 +283,8 @@ export class ReactionsService {
         sourceType: 'REPLY_REACTION',
         sourceId: result.notificationSourceId,
       });
+
+      await this.publishEvent(result.event ?? null);
     }
 
     return {
@@ -229,8 +297,8 @@ export class ReactionsService {
   async unlikeReply(userId: string, replyId: string): Promise<ReplyReactionResponse> {
     await this.findActiveReply(replyId);
 
-    return this.prisma.$transaction(async (tx) => {
-      const client = tx as TransactionClient;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const client = tx as unknown as TransactionClient;
       const reactionWhere = {
         replyId_userId_type: {
           replyId,
@@ -279,12 +347,36 @@ export class ReactionsService {
         select: { likeCount: true },
       });
 
+      const likeCount = updatedReply?.likeCount ?? 0;
       return {
         replyId,
-        likeCount: updatedReply?.likeCount ?? 0,
+        likeCount,
         isLiked: false,
+        event: await this.createOutboxEvent(
+          {
+            type: 'reaction.deleted',
+            actorId: userId,
+            subjectType: 'REPLY',
+            subjectId: replyId,
+            rooms: [`thread:${replyId}`, `user:${userId}`],
+            payload: {
+              targetType: 'REPLY',
+              targetId: replyId,
+              likeCount,
+              isLiked: false,
+            },
+          },
+          client,
+        ),
       };
     });
+    await this.publishEvent(result.event ?? null);
+
+    return {
+      replyId: result.replyId,
+      likeCount: result.likeCount,
+      isLiked: result.isLiked,
+    };
   }
 
   private async findActivePost(postId: string): Promise<ReactionTarget> {
@@ -318,5 +410,36 @@ export class ReactionsService {
       code: 'REACTION_TARGET_NOT_FOUND',
       message: 'Target content was not found.',
     });
+  }
+
+  private async createOutboxEvent(
+    input: {
+      type: string;
+      actorId: string;
+      subjectType: string;
+      subjectId: string;
+      rooms: string[];
+      payload: unknown;
+    },
+    tx: TransactionClient,
+  ): Promise<DomainEventEnvelope | null> {
+    if (!this.domainEventsService) {
+      return null;
+    }
+
+    return this.domainEventsService.createEvent(input, tx);
+  }
+
+  private async publishEvent(event: DomainEventEnvelope | null): Promise<void> {
+    if (!event || !this.domainEventsService || !this.realtimeEventsService) {
+      return;
+    }
+
+    try {
+      this.realtimeEventsService.publish(event);
+      await this.domainEventsService.markPublished(event.eventId);
+    } catch {
+      return;
+    }
   }
 }

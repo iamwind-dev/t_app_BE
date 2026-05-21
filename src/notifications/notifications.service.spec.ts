@@ -252,7 +252,7 @@ describe('NotificationsService', () => {
       id: notificationId,
       type: 'LIKE',
       recipientId,
-      title: 'New notification',
+      title: 'Together Notification',
       body: 'Other User liked your post.',
       targetType: 'POST',
       targetId: postId,

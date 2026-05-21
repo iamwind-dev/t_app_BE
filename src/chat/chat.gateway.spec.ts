@@ -32,6 +32,7 @@ describe('ChatGateway', () => {
   let serverRoomEmitter: { emit: jest.Mock };
   let loggerWarnSpy: jest.SpyInstance;
   let loggerErrorSpy: jest.SpyInstance;
+  const legacyRoomEnv = process.env.CHAT_ENABLE_LEGACY_CONVERSATION_ROOM;
 
   const userId = '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
   const conversationId = '3a50afcb-17a4-4d7c-8f58-c3d280467ba1';
@@ -77,6 +78,11 @@ describe('ChatGateway', () => {
   afterEach(() => {
     loggerWarnSpy.mockRestore();
     loggerErrorSpy.mockRestore();
+    if (legacyRoomEnv === undefined) {
+      delete process.env.CHAT_ENABLE_LEGACY_CONVERSATION_ROOM;
+    } else {
+      process.env.CHAT_ENABLE_LEGACY_CONVERSATION_ROOM = legacyRoomEnv;
+    }
   });
 
   it('authenticates socket connections with JWT and stores user id on socket data', async () => {
@@ -105,13 +111,12 @@ describe('ChatGateway', () => {
   it('joins a conversation room only after membership validation', async () => {
     const socket = createSocket();
     socket.data.userId = userId;
-    const receiverEmitter = { emit: jest.fn() };
-    socket.to.mockReturnValue(receiverEmitter);
     const ack = jest.fn();
 
     await gateway.handleJoinConversation(socket as never, { conversationId }, ack);
 
     expect(chatService.assertConversationMember).toHaveBeenCalledWith(userId, conversationId);
+    expect(socket.join).toHaveBeenCalledWith(`chat:${conversationId}`);
     expect(socket.join).toHaveBeenCalledWith(`conversation:${conversationId}`);
     expect(ack).toHaveBeenCalledWith({
       success: true,
@@ -130,6 +135,7 @@ describe('ChatGateway', () => {
     await gateway.handleLeaveConversation(socket as never, { conversationId }, ack);
 
     expect(chatService.assertConversationMember).toHaveBeenCalledWith(userId, conversationId);
+    expect(socket.leave).toHaveBeenCalledWith(`chat:${conversationId}`);
     expect(socket.leave).toHaveBeenCalledWith(`conversation:${conversationId}`);
     expect(ack).toHaveBeenCalledWith({
       success: true,
@@ -177,8 +183,6 @@ describe('ChatGateway', () => {
   it('sends a message then emits new_message to receivers and message_sent to sender', async () => {
     const socket = createSocket();
     socket.data.userId = userId;
-    const receiverEmitter = { emit: jest.fn() };
-    socket.to.mockReturnValue(receiverEmitter);
     const ack = jest.fn();
     const messageResult = {
       clientTempId: 'local-1',
@@ -211,8 +215,9 @@ describe('ChatGateway', () => {
       content: 'Hello!',
       type: 'text',
     });
-    expect(socket.to).toHaveBeenCalledWith(`conversation:${conversationId}`);
-    expect(receiverEmitter.emit).toHaveBeenCalledWith('new_message', {
+    expect(serverTo).toHaveBeenCalledWith(`chat:${conversationId}`);
+    expect(serverTo).toHaveBeenCalledWith(`conversation:${conversationId}`);
+    expect(serverRoomEmitter.emit).toHaveBeenCalledWith('new_message', {
       conversationId,
       message: messageResult.message,
     });
@@ -226,20 +231,19 @@ describe('ChatGateway', () => {
   it('broadcasts typing start and stop to other room members only', async () => {
     const socket = createSocket();
     socket.data.userId = userId;
-    const roomEmitter = { emit: jest.fn() };
-    socket.to.mockReturnValue(roomEmitter);
 
     await gateway.handleTypingStart(socket as never, { conversationId }, jest.fn());
     await gateway.handleTypingStop(socket as never, { conversationId }, jest.fn());
 
     expect(chatService.assertConversationMember).toHaveBeenCalledTimes(2);
-    expect(socket.to).toHaveBeenCalledWith(`conversation:${conversationId}`);
-    expect(roomEmitter.emit).toHaveBeenCalledWith('user_typing_start', {
+    expect(serverTo).toHaveBeenCalledWith(`chat:${conversationId}`);
+    expect(serverTo).toHaveBeenCalledWith(`conversation:${conversationId}`);
+    expect(serverRoomEmitter.emit).toHaveBeenCalledWith('user_typing_start', {
       conversationId,
       userId,
       occurredAt: expect.any(String),
     });
-    expect(roomEmitter.emit).toHaveBeenCalledWith('user_typing_stop', {
+    expect(serverRoomEmitter.emit).toHaveBeenCalledWith('user_typing_stop', {
       conversationId,
       userId,
       occurredAt: expect.any(String),
@@ -261,11 +265,47 @@ describe('ChatGateway', () => {
     await gateway.handleMarkSeen(socket as never, { conversationId, messageId }, ack);
 
     expect(chatService.markSeen).toHaveBeenCalledWith(userId, { conversationId, messageId });
+    expect(serverTo).toHaveBeenCalledWith(`chat:${conversationId}`);
     expect(serverTo).toHaveBeenCalledWith(`conversation:${conversationId}`);
     expect(serverRoomEmitter.emit).toHaveBeenCalledWith('message_seen', seenResult);
     expect(ack).toHaveBeenCalledWith({
       success: true,
       data: seenResult,
     });
+  });
+
+  it('uses only chat:{id} room when legacy room compatibility is disabled', async () => {
+    process.env.CHAT_ENABLE_LEGACY_CONVERSATION_ROOM = 'false';
+    const socket = createSocket();
+    socket.data.userId = userId;
+    chatService.sendTextMessage.mockResolvedValue({
+      clientTempId: 'local-1',
+      message: {
+        id: messageId,
+        conversationId,
+        sender: {
+          id: userId,
+          username: 'current_user',
+          displayName: 'Current User',
+          avatarUrl: null,
+        },
+        type: 'text',
+        text: 'Hello!',
+        createdAt: new Date('2026-04-24T14:04:00.000Z'),
+        updatedAt: new Date('2026-04-24T14:04:00.000Z'),
+      },
+    });
+
+    await gateway.handleJoinConversation(socket as never, { conversationId }, jest.fn());
+    await gateway.handleSendMessage(
+      socket as never,
+      { conversationId, clientTempId: 'local-1', content: 'Hello!', type: 'text' },
+      jest.fn(),
+    );
+
+    expect(socket.join).toHaveBeenCalledWith(`chat:${conversationId}`);
+    expect(socket.join).not.toHaveBeenCalledWith(`conversation:${conversationId}`);
+    expect(serverTo).toHaveBeenCalledWith(`chat:${conversationId}`);
+    expect(serverTo).not.toHaveBeenCalledWith(`conversation:${conversationId}`);
   });
 });

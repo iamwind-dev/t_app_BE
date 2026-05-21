@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { MarkSeenPayloadDto, SendMessagePayloadDto } from './dto/socket-chat.dto';
@@ -103,6 +104,8 @@ const messageInclude = {
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
@@ -601,14 +604,22 @@ export class ChatService {
     })) as Array<{ userId: string }>;
 
     await Promise.all(
-      recipients.map((recipient) =>
-        this.notificationsService.createMessageNotification({
-          actorId,
-          recipientId: recipient.userId,
-          conversationId,
-          messageId,
-        }),
-      ),
+      recipients.map(async (recipient) => {
+        try {
+          await this.notificationsService.createMessageNotification({
+            actorId,
+            recipientId: recipient.userId,
+            conversationId,
+            messageId,
+          });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'unknown notification failure';
+          this.logger.warn(
+            `createMessageNotification failed: conversationId=${conversationId} messageId=${messageId} recipientId=${recipient.userId} error=${message}`,
+          );
+        }
+      }),
     );
   }
 
