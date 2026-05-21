@@ -11,11 +11,13 @@ import { RepliesController } from './replies.controller';
 import { RepliesService } from './replies.service';
 
 @Module({
-
-  imports: [PrismaModule, NotificationsModule, UploadsModule, DomainEventsModule],
-
-  imports: [PrismaModule, NotificationsModule, UploadsModule, ModerationModule],
-
+  imports: [
+    PrismaModule,
+    NotificationsModule,
+    UploadsModule,
+    DomainEventsModule,
+    ModerationModule,
+  ],
   controllers: [RepliesController],
   providers: [RepliesService],
   exports: [RepliesService],

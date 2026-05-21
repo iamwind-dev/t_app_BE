@@ -9,3 +9,7 @@ backups/
 ai-service/.venv
 model/
 .npm-cache/
+
+.history/
+
+.agents/

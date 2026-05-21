@@ -83,12 +83,10 @@ export class RepliesService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly uploadsService: UploadsService,
+    private readonly moderationService: ModerationService,
 
     private readonly domainEventsService?: DomainEventsService,
     private readonly realtimeEventsService?: RealtimeEventsService,
-
-    private readonly moderationService: ModerationService,
-
   ) {}
 
   async createPostReply(
