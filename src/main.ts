@@ -5,20 +5,18 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { getCorsOrigins } from './common/config/cors.util';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  const corsOrigins = configService
-    .get<string>('CORS_ORIGINS', '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin.length > 0);
-
   app.enableCors({
-    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    origin: getCorsOrigins({
+      CORS_ORIGIN: configService.get<string>('CORS_ORIGIN'),
+      CORS_ORIGINS: configService.get<string>('CORS_ORIGINS'),
+    }),
     credentials: true,
   });
 
@@ -63,9 +61,9 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup(swaggerPath, app, document);
   }
 
-  const port = configService.get<number>('PORT', 3000);
-  await app.listen(port);
-  logger.log(`Application is running on http://localhost:${port}`);
+  const port = configService.get<number>('PORT') ?? Number(process.env.PORT ?? 3000);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`Application is running on 0.0.0.0:${port}`);
 }
 
 void bootstrap();

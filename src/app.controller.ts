@@ -16,6 +16,8 @@ export class AppController {
         success: true,
         data: {
           status: 'ok',
+          service: 't-app-backend',
+          timestamp: '2026-05-23T00:00:00.000Z',
         },
       },
     },

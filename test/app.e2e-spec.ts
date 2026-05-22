@@ -26,11 +26,11 @@ describe('App bootstrap (e2e)', () => {
       .get('/health')
       .expect(200)
       .expect(({ body }) => {
-        expect(body).toEqual({
-          success: true,
-          data: {
-            status: 'ok',
-          },
+        expect(body.success).toBe(true);
+        expect(body.data).toEqual({
+          status: 'ok',
+          service: 't-app-backend',
+          timestamp: expect.any(String),
         });
       });
   });

@@ -5,6 +5,7 @@
   "description": "NestJS backend for a Threads-like social networking application.",
   "license": "UNLICENSED",
   "scripts": {
+    "prebuild": "npm run prisma:generate",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"prisma/**/*.prisma\"",
     "start": "nest start",
@@ -16,7 +17,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:validate": "prisma validate --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-    "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma"
+    "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
