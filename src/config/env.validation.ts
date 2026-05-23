@@ -2,7 +2,9 @@ interface EnvironmentVariables {
   NODE_ENV: string;
   PORT: number;
   DATABASE_URL?: string;
+  DIRECT_URL?: string;
   JWT_ACCESS_SECRET?: string;
+  JWT_REFRESH_SECRET?: string;
   JWT_ACCESS_EXPIRES_IN: string;
   CORS_ORIGINS: string;
   SWAGGER_ENABLED: string;
@@ -83,12 +85,18 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
       typeof config.DATABASE_URL === 'string' && config.DATABASE_URL.length > 0
         ? config.DATABASE_URL
         : undefined,
+    DIRECT_URL:
+      typeof config.DIRECT_URL === 'string' && config.DIRECT_URL.length > 0 ? config.DIRECT_URL : undefined,
     JWT_ACCESS_SECRET:
       typeof config.JWT_ACCESS_SECRET === 'string' && config.JWT_ACCESS_SECRET.length > 0
         ? config.JWT_ACCESS_SECRET
         : undefined,
+    JWT_REFRESH_SECRET:
+      typeof config.JWT_REFRESH_SECRET === 'string' && config.JWT_REFRESH_SECRET.length > 0
+        ? config.JWT_REFRESH_SECRET
+        : undefined,
     JWT_ACCESS_EXPIRES_IN: getString(config.JWT_ACCESS_EXPIRES_IN, '1h'),
-    CORS_ORIGINS: getString(config.CORS_ORIGINS, ''),
+    CORS_ORIGINS: getString(config.CORS_ORIGIN ?? config.CORS_ORIGINS, ''),
     SWAGGER_ENABLED: getString(config.SWAGGER_ENABLED, 'true'),
     SWAGGER_PATH: getString(config.SWAGGER_PATH, 'docs'),
     UPLOAD_STORAGE_PROVIDER: getString(config.UPLOAD_STORAGE_PROVIDER, 'local'),

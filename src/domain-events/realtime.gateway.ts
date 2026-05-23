@@ -13,6 +13,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { getCorsOrigins } from '../common/config/cors.util';
 import { RealtimeRoomsDto } from './dto/realtime-room.dto';
 import { RealtimeEventsService } from './realtime-events.service';
 
@@ -35,7 +36,7 @@ interface AuthenticatedSocket extends Socket {
 @WebSocketGateway({
   namespace: '/realtime',
   cors: {
-    origin: true,
+    origin: getCorsOrigins(process.env),
     credentials: true,
   },
 })

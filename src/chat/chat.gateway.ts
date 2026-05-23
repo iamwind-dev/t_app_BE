@@ -21,6 +21,7 @@ import {
   TypingPayloadDto,
 } from './dto/socket-chat.dto';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { getCorsOrigins } from '../common/config/cors.util';
 
 type SocketAck = (response: SocketAckResponse) => void;
 
@@ -42,7 +43,7 @@ interface AuthenticatedSocket extends Socket {
 
 @WebSocketGateway({
   cors: {
-    origin: true,
+    origin: getCorsOrigins(process.env),
     credentials: true,
   },
 })
