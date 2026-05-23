@@ -27,6 +27,11 @@ enum ReactionType {
   LIKE
 }
 
+enum PostType {
+  THREAD
+  REEL
+}
+
 enum ConversationType {
   DIRECT
 }
@@ -83,8 +88,14 @@ model User {
 model Post {
   id               String           @id @default(uuid()) @db.Uuid
   authorId         String           @db.Uuid
+  type             PostType         @default(THREAD)
   content          String?          @db.VarChar(500)
   mediaUrls        String[]         @default([])
+  videoUrl         String?          @db.VarChar(2048)
+  thumbnailUrl     String?          @db.VarChar(2048)
+  audioTitle       String?          @db.VarChar(120)
+  durationSeconds  Int?
+  viewCount        Int              @default(0)
   likeCount        Int              @default(0)
   replyCount       Int              @default(0)
   moderationStatus ModerationStatus @default(APPROVED)
@@ -113,6 +124,7 @@ model Post {
   notifications Notification[]
 
   @@index([authorId, createdAt, id])
+  @@index([type, createdAt, id])
   @@index([createdAt, id])
   @@index([deletedAt])
   @@index([moderationStatus, createdAt])

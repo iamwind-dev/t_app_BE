@@ -169,7 +169,7 @@ export class NotificationsService {
       sourceType: input.sourceType,
       sourceId: input.sourceId,
       messageBuilder: (actorName) =>
-        `${actorName} liked your ${input.targetType === 'POST' ? 'post' : 'reply'}.`,
+        `${actorName} liked your ${this.toContentLabel(input.targetType)}.`,
       metadata: input.metadata,
     });
   }
@@ -185,8 +185,13 @@ export class NotificationsService {
       targetId: input.targetId,
       sourceType: 'REPLY',
       sourceId: input.replyId,
-      messageBuilder: (actorName) =>
-        `${actorName} replied to your ${input.targetType === 'POST' ? 'post' : 'reply'}.`,
+      messageBuilder: (actorName) => {
+        if (input.targetType === 'REEL') {
+          return `${actorName} commented on your reel.`;
+        }
+
+        return `${actorName} replied to your ${this.toContentLabel(input.targetType)}.`;
+      },
       metadata: input.metadata,
     });
   }
@@ -321,7 +326,7 @@ export class NotificationsService {
 
     try {
       const result = await this.runInTransaction(async (tx) => {
-        const client = tx as unknown as NotificationsTransactionClient;
+        const client = tx;
         const notification = (await client.notification.create({
           data: {
             type: input.type,
@@ -396,6 +401,18 @@ export class NotificationsService {
       createdAt: notification.createdAt,
       updatedAt: notification.updatedAt,
     };
+  }
+
+  private toContentLabel(targetType: string): string {
+    if (targetType === 'REEL') {
+      return 'reel';
+    }
+
+    if (targetType === 'REPLY') {
+      return 'reply';
+    }
+
+    return 'post';
   }
 
   private async dispatchPushNotification(notification: NotificationResponseItem): Promise<void> {
@@ -545,10 +562,10 @@ export class NotificationsService {
     fn: (tx: NotificationsTransactionClient) => Promise<T>,
   ): Promise<T> {
     if (typeof this.prisma.$transaction !== 'function') {
-      return fn(this.prisma as unknown as NotificationsTransactionClient);
+      return fn(this.prisma);
     }
 
-    return this.prisma.$transaction(async (tx) => fn(tx as unknown as NotificationsTransactionClient));
+    return this.prisma.$transaction(async (tx) => fn(tx));
   }
 }
 
