@@ -43,14 +43,14 @@ export interface UnreadNotificationsCountResponse {
   unreadCount: number;
 }
 
-export type NotificationTargetType = 'POST' | 'REPLY' | 'USER' | 'MESSAGE' | 'CONVERSATION';
+export type NotificationTargetType = 'POST' | 'REPLY' | 'REEL' | 'USER' | 'MESSAGE' | 'CONVERSATION';
 
 export interface CreateLikeNotificationInput {
   actorId: string;
   recipientId: string;
-  targetType: Extract<NotificationTargetType, 'POST' | 'REPLY'>;
+  targetType: Extract<NotificationTargetType, 'POST' | 'REPLY' | 'REEL'>;
   targetId: string;
-  sourceType: 'POST_REACTION' | 'REPLY_REACTION';
+  sourceType: 'POST_REACTION' | 'REPLY_REACTION' | 'REEL_REACTION';
   sourceId: string;
   metadata?: unknown;
 }
@@ -58,7 +58,7 @@ export interface CreateLikeNotificationInput {
 export interface CreateReplyNotificationInput {
   actorId: string;
   recipientId: string;
-  targetType: Extract<NotificationTargetType, 'POST' | 'REPLY'>;
+  targetType: Extract<NotificationTargetType, 'POST' | 'REPLY' | 'REEL'>;
   targetId: string;
   replyId: string;
   metadata?: unknown;

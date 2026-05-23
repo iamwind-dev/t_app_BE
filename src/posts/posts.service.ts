@@ -170,6 +170,7 @@ export class PostsService {
     const limit = query.limit ?? 20;
     const posts = (await this.prisma.post.findMany({
       where: {
+        type: 'THREAD',
         deletedAt: null,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
