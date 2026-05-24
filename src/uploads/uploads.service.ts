@@ -26,6 +26,7 @@ const allowedVideoMimeTypes = new Set(['video/mp4', 'video/quicktime', 'video/we
 const defaultMaxVideoSizeBytes = 100 * 1024 * 1024;
 const maxPostVideoDurationSeconds = 60;
 const defaultPendingUploadTtlHours = 24;
+const maxUploadOriginalNameLength = 255;
 
 export type UploadAttachmentType = 'post' | 'reply' | 'profile_avatar';
 
@@ -86,7 +87,7 @@ export class UploadsService {
           type,
           mimeType: file.mimetype,
           sizeBytes: file.size,
-          originalName: file.originalname || null,
+          originalName: this.normalizeOriginalName(file.originalname),
         },
         select: {
           id: true,
@@ -137,7 +138,7 @@ export class UploadsService {
           type: 'post',
           mimeType: file.mimetype,
           sizeBytes: file.size,
-          originalName: file.originalname || null,
+          originalName: this.normalizeOriginalName(file.originalname),
         },
         select: {
           secureUrl: true,
@@ -366,6 +367,19 @@ export class UploadsService {
 
   private uniqueSecureUrls(secureUrls: string[]): string[] {
     return [...new Set(secureUrls.map((url) => url.trim()).filter((url) => url.length > 0))];
+  }
+
+  private normalizeOriginalName(originalName: string | null | undefined): string | null {
+    if (!originalName) {
+      return null;
+    }
+
+    const normalized = originalName.trim();
+    if (normalized.length === 0) {
+      return null;
+    }
+
+    return normalized.slice(0, maxUploadOriginalNameLength);
   }
 
   private defaultPendingUploadCutoff(): Date {

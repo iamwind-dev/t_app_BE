@@ -181,6 +181,39 @@ describe('UploadsService', () => {
     });
   });
 
+  it('truncates long upload original names to fit persisted metadata columns', async () => {
+    storageProvider.uploadVideo.mockResolvedValue({
+      secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
+      publicId: 'uploads/posts/video',
+      durationSeconds: 42,
+    });
+    prisma.upload.create.mockResolvedValue({
+      secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
+      publicId: 'uploads/posts/video',
+    });
+
+    const longOriginalName = `${'a'.repeat(300)}.mp4`;
+    const videoFile = {
+      ...imageFile,
+      mimetype: 'video/mp4',
+      originalname: longOriginalName,
+      size: 1024 * 1024,
+      buffer: Buffer.from('fake-video'),
+    };
+
+    await service.uploadPostVideo(userId, videoFile, {});
+
+    expect(prisma.upload.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        originalName: longOriginalName.slice(0, 255),
+      }),
+      select: {
+        secureUrl: true,
+        publicId: true,
+      },
+    });
+  });
+
   it('attaches matching uploads and orphans removed resource uploads', async () => {
     const now = new Date('2026-05-10T09:00:00.000Z');
     jest.spyOn(global, 'Date').mockImplementation(() => now);
