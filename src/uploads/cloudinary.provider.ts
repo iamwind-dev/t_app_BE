@@ -19,6 +19,8 @@ const uploadFolderByType: Record<UploadImageType, string> = {
 
 @Injectable()
 export class CloudinaryProvider implements ImageStorageProvider {
+  private static readonly androidCompatibleVideoTransform =
+    'f_mp4,vc_h264,ac_aac,fl_progressive,q_auto';
   private readonly logger = new Logger(CloudinaryProvider.name);
   private readonly cloudName: string | undefined;
   private readonly apiKey: string | undefined;
@@ -84,7 +86,7 @@ export class CloudinaryProvider implements ImageStorageProvider {
     }
 
     return {
-      secureUrl: result.secure_url,
+      secureUrl: this.buildAndroidCompatibleVideoUrl(result.secure_url, result.public_id),
       publicId: result.public_id,
       durationSeconds,
     };
@@ -175,5 +177,18 @@ export class CloudinaryProvider implements ImageStorageProvider {
         error instanceof Error ? error.stack : undefined,
       );
     }
+  }
+
+  private buildAndroidCompatibleVideoUrl(secureUrl: string, publicId: string): string {
+    const versionMatch = secureUrl.match(/\/upload\/(v\d+)\//);
+    const versionSegment = versionMatch?.[1];
+
+    return cloudinary.url(publicId, {
+      resource_type: 'video',
+      secure: true,
+      format: 'mp4',
+      transformation: CloudinaryProvider.androidCompatibleVideoTransform,
+      version: versionSegment ? Number(versionSegment.slice(1)) : undefined,
+    });
   }
 }
