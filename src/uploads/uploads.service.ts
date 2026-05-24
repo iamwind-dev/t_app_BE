@@ -24,7 +24,7 @@ const allowedUploadTypes = new Set<UploadImageType>(['post', 'reply', 'profile_a
 const defaultMaxImageSizeBytes = 5 * 1024 * 1024;
 const allowedVideoMimeTypes = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
 const defaultMaxVideoSizeBytes = 25 * 1024 * 1024;
-const maxPostVideoDurationSeconds = 10;
+const maxPostVideoDurationSeconds = 60;
 const defaultPendingUploadTtlHours = 24;
 
 export type UploadAttachmentType = 'post' | 'reply' | 'profile_avatar';

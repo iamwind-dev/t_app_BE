@@ -148,7 +148,7 @@ describe('CloudinaryProvider', () => {
           callback(undefined, {
             secure_url: 'https://res.cloudinary.com/demo/video/upload/v1/threads-like/posts/user/video',
             public_id: 'threads-like/posts/user/video',
-            duration: 8.2,
+            duration: 58.2,
           }),
         );
         return uploadStream;
@@ -169,11 +169,11 @@ describe('CloudinaryProvider', () => {
 
     const result = await provider.uploadVideo({
       userId: 'user-id',
-      maxDurationSeconds: 10,
+      maxDurationSeconds: 60,
       file: { buffer: Buffer.from('video') } as Express.Multer.File,
     });
 
-    expect(result.durationSeconds).toBe(8.2);
+    expect(result.durationSeconds).toBe(58.2);
     expect(result.publicId).toBe('threads-like/posts/user/video');
     expect(cloudinary.uploader.destroy).not.toHaveBeenCalled();
   });

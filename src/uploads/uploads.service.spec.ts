@@ -152,7 +152,7 @@ describe('UploadsService', () => {
     storageProvider.uploadVideo.mockResolvedValue({
       secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
       publicId: 'uploads/posts/video',
-      durationSeconds: 9.4,
+      durationSeconds: 59.4,
     });
     prisma.upload.create.mockResolvedValue({
       secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
@@ -172,12 +172,12 @@ describe('UploadsService', () => {
     expect(storageProvider.uploadVideo).toHaveBeenCalledWith({
       userId,
       file: videoFile,
-      maxDurationSeconds: 10,
+      maxDurationSeconds: 60,
     });
     expect(result).toEqual({
       url: 'https://cdn.example.com/uploads/posts/video.mp4',
       publicId: 'uploads/posts/video',
-      durationSeconds: 9.4,
+      durationSeconds: 59.4,
     });
   });
 

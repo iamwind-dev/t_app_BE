@@ -1,6 +1,10 @@
 import { ModerationLayerResult, ModerationResult } from '../types/moderation';
 
-const BACKEND_URL = 'http://localhost:3000';
+const DEFAULT_BACKEND_URL = 'http://localhost:3000';
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL?.trim() || DEFAULT_BACKEND_URL).replace(
+  /\/+$/,
+  '',
+);
 export const USE_MOCK_API = false;
 
 interface BackendModerationLayer {

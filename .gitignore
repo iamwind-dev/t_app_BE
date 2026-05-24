@@ -13,3 +13,6 @@ model/
 .history/
 
 .agents/
+
+ai-service/
+web-ai-moderation-demo/
