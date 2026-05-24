@@ -20,7 +20,7 @@ import { UploadsService } from './uploads.service';
 import { UploadImageResponse, UploadVideoResponse } from './types/upload-response.type';
 
 const maxImageSizeBytes = 5 * 1024 * 1024;
-const maxVideoSizeBytes = 25 * 1024 * 1024;
+const maxVideoSizeBytes = 100 * 1024 * 1024;
 
 @ApiTags('Uploads')
 @ApiBearerAuth()

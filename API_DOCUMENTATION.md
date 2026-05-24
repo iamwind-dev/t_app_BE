@@ -4020,7 +4020,7 @@ Không có.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `file` | file | Yes | MP4/MOV/WEBM, tối đa 25MB |
+| `file` | file | Yes | MP4/MOV/WEBM, tối đa 100MB |
 
 ### Response thành công
 HTTP `201`

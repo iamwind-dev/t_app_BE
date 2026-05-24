@@ -23,7 +23,7 @@ const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedUploadTypes = new Set<UploadImageType>(['post', 'reply', 'profile_avatar']);
 const defaultMaxImageSizeBytes = 5 * 1024 * 1024;
 const allowedVideoMimeTypes = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
-const defaultMaxVideoSizeBytes = 25 * 1024 * 1024;
+const defaultMaxVideoSizeBytes = 100 * 1024 * 1024;
 const maxPostVideoDurationSeconds = 60;
 const defaultPendingUploadTtlHours = 24;
 

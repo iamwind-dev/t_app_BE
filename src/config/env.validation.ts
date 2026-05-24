@@ -44,7 +44,7 @@ export function validateEnv(config: Record<string, unknown>): EnvironmentVariabl
     throw new Error('UPLOAD_MAX_IMAGE_SIZE_BYTES must be an integer between 1 and 20971520.');
   }
 
-  const uploadMaxVideoSizeBytes = Number(config.UPLOAD_MAX_VIDEO_SIZE_BYTES ?? 25 * 1024 * 1024);
+  const uploadMaxVideoSizeBytes = Number(config.UPLOAD_MAX_VIDEO_SIZE_BYTES ?? 100 * 1024 * 1024);
 
   if (
     !Number.isInteger(uploadMaxVideoSizeBytes) ||

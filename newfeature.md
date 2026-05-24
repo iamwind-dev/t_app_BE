@@ -47,7 +47,7 @@
 
 ### Validation
 - MIME: `video/mp4`, `video/quicktime` (MOV), `video/webm`
-- Max size: `UPLOAD_MAX_VIDEO_SIZE_BYTES` (default `25MB`)
+- Max size: `UPLOAD_MAX_VIDEO_SIZE_BYTES` (default `100MB`)
 - Duration: `<= 10s` (enforced server-side via Cloudinary metadata)
 
 ### Success Response
@@ -186,7 +186,7 @@ Cloudinary:
 - `CLOUDINARY_API_SECRET`
 - `CLOUDINARY_UPLOAD_FOLDER` (default: `threads-like`)
 - `UPLOAD_MAX_IMAGE_SIZE_BYTES` (default: `5242880`)
-- `UPLOAD_MAX_VIDEO_SIZE_BYTES` (default: `26214400`)
+- `UPLOAD_MAX_VIDEO_SIZE_BYTES` (default: `104857600`)
 
 Firebase Admin:
 - `FIREBASE_PROJECT_ID`
