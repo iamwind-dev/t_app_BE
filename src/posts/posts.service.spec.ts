@@ -54,6 +54,7 @@ describe('PostsService', () => {
   let service: PostsService;
   let prisma: MockPrismaService;
   let uploadsService: {
+    assertMediaAllowedForPublishing: jest.Mock;
     syncAttachedUploads: jest.Mock;
     markResourceUploadsOrphaned: jest.Mock;
   };
@@ -121,6 +122,7 @@ describe('PostsService', () => {
     };
 
     uploadsService = {
+      assertMediaAllowedForPublishing: jest.fn().mockResolvedValue(undefined),
       syncAttachedUploads: jest.fn(),
       markResourceUploadsOrphaned: jest.fn(),
     };

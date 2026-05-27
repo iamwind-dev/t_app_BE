@@ -1,0 +1,41 @@
+f1f7b088b9643baa0ea384bc64805e88
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var RealtimeEventsService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.RealtimeEventsService = void 0;
+const common_1 = require("@nestjs/common");
+let RealtimeEventsService = RealtimeEventsService_1 = class RealtimeEventsService {
+    logger = new common_1.Logger(RealtimeEventsService_1.name);
+    server = null;
+    bindServer(server) {
+        this.server = server;
+    }
+    publish(event) {
+        if (!this.server) {
+            return;
+        }
+        for (const room of event.rooms) {
+            this.server.to(room).emit('domain_event', event);
+        }
+    }
+    publishMany(events) {
+        for (const event of events) {
+            this.publish(event);
+        }
+    }
+    logPublishFailure(eventId, error) {
+        const message = error instanceof Error ? error.message : 'unknown';
+        this.logger.error(`Failed to publish domain event: eventId=${eventId} error=${message}`);
+    }
+};
+exports.RealtimeEventsService = RealtimeEventsService;
+exports.RealtimeEventsService = RealtimeEventsService = RealtimeEventsService_1 = __decorate([
+    (0, common_1.Injectable)()
+], RealtimeEventsService);
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJmaWxlIjoiRTpcXFByb2plY3RfRmx1dHRlclxcdF9hcHBfQkVcXHNyY1xcZG9tYWluLWV2ZW50c1xccmVhbHRpbWUtZXZlbnRzLnNlcnZpY2UudHMiLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7OztBQUFBLDJDQUFvRDtBQUs3QyxJQUFNLHFCQUFxQiw2QkFBM0IsTUFBTSxxQkFBcUI7SUFDZixNQUFNLEdBQUcsSUFBSSxlQUFNLENBQUMsdUJBQXFCLENBQUMsSUFBSSxDQUFDLENBQUM7SUFDekQsTUFBTSxHQUFrQixJQUFJLENBQUM7SUFFckMsVUFBVSxDQUFDLE1BQWM7UUFDdkIsSUFBSSxDQUFDLE1BQU0sR0FBRyxNQUFNLENBQUM7SUFDdkIsQ0FBQztJQUVELE9BQU8sQ0FBQyxLQUEwQjtRQUNoQyxJQUFJLENBQUMsSUFBSSxDQUFDLE1BQU0sRUFBRSxDQUFDO1lBQ2pCLE9BQU87UUFDVCxDQUFDO1FBRUQsS0FBSyxNQUFNLElBQUksSUFBSSxLQUFLLENBQUMsS0FBSyxFQUFFLENBQUM7WUFDL0IsSUFBSSxDQUFDLE1BQU0sQ0FBQyxFQUFFLENBQUMsSUFBSSxDQUFDLENBQUMsSUFBSSxDQUFDLGNBQWMsRUFBRSxLQUFLLENBQUMsQ0FBQztRQUNuRCxDQUFDO0lBQ0gsQ0FBQztJQUVELFdBQVcsQ0FBQyxNQUE2QjtRQUN2QyxLQUFLLE1BQU0sS0FBSyxJQUFJLE1BQU0sRUFBRSxDQUFDO1lBQzNCLElBQUksQ0FBQyxPQUFPLENBQUMsS0FBSyxDQUFDLENBQUM7UUFDdEIsQ0FBQztJQUNILENBQUM7SUFFRCxpQkFBaUIsQ0FBQyxPQUFlLEVBQUUsS0FBYztRQUMvQyxNQUFNLE9BQU8sR0FBRyxLQUFLLFlBQVksS0FBSyxDQUFDLENBQUMsQ0FBQyxLQUFLLENBQUMsT0FBTyxDQUFDLENBQUMsQ0FBQyxTQUFTLENBQUM7UUFDbkUsSUFBSSxDQUFDLE1BQU0sQ0FBQyxLQUFLLENBQUMsMkNBQTJDLE9BQU8sVUFBVSxPQUFPLEVBQUUsQ0FBQyxDQUFDO0lBQzNGLENBQUM7Q0FDRixDQUFBO0FBNUJZLHNEQUFxQjtnQ0FBckIscUJBQXFCO0lBRGpDLElBQUEsbUJBQVUsR0FBRTtHQUNBLHFCQUFxQixDQTRCakMiLCJuYW1lcyI6W10sInNvdXJjZXMiOlsiRTpcXFByb2plY3RfRmx1dHRlclxcdF9hcHBfQkVcXHNyY1xcZG9tYWluLWV2ZW50c1xccmVhbHRpbWUtZXZlbnRzLnNlcnZpY2UudHMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgSW5qZWN0YWJsZSwgTG9nZ2VyIH0gZnJvbSAnQG5lc3Rqcy9jb21tb24nO1xyXG5pbXBvcnQgeyBTZXJ2ZXIgfSBmcm9tICdzb2NrZXQuaW8nO1xyXG5pbXBvcnQgeyBEb21haW5FdmVudEVudmVsb3BlIH0gZnJvbSAnLi90eXBlcy9kb21haW4tZXZlbnQudHlwZSc7XHJcblxyXG5ASW5qZWN0YWJsZSgpXHJcbmV4cG9ydCBjbGFzcyBSZWFsdGltZUV2ZW50c1NlcnZpY2Uge1xyXG4gIHByaXZhdGUgcmVhZG9ubHkgbG9nZ2VyID0gbmV3IExvZ2dlcihSZWFsdGltZUV2ZW50c1NlcnZpY2UubmFtZSk7XHJcbiAgcHJpdmF0ZSBzZXJ2ZXI6IFNlcnZlciB8IG51bGwgPSBudWxsO1xyXG5cclxuICBiaW5kU2VydmVyKHNlcnZlcjogU2VydmVyKTogdm9pZCB7XHJcbiAgICB0aGlzLnNlcnZlciA9IHNlcnZlcjtcclxuICB9XHJcblxyXG4gIHB1Ymxpc2goZXZlbnQ6IERvbWFpbkV2ZW50RW52ZWxvcGUpOiB2b2lkIHtcclxuICAgIGlmICghdGhpcy5zZXJ2ZXIpIHtcclxuICAgICAgcmV0dXJuO1xyXG4gICAgfVxyXG5cclxuICAgIGZvciAoY29uc3Qgcm9vbSBvZiBldmVudC5yb29tcykge1xyXG4gICAgICB0aGlzLnNlcnZlci50byhyb29tKS5lbWl0KCdkb21haW5fZXZlbnQnLCBldmVudCk7XHJcbiAgICB9XHJcbiAgfVxyXG5cclxuICBwdWJsaXNoTWFueShldmVudHM6IERvbWFpbkV2ZW50RW52ZWxvcGVbXSk6IHZvaWQge1xyXG4gICAgZm9yIChjb25zdCBldmVudCBvZiBldmVudHMpIHtcclxuICAgICAgdGhpcy5wdWJsaXNoKGV2ZW50KTtcclxuICAgIH1cclxuICB9XHJcblxyXG4gIGxvZ1B1Ymxpc2hGYWlsdXJlKGV2ZW50SWQ6IHN0cmluZywgZXJyb3I6IHVua25vd24pOiB2b2lkIHtcclxuICAgIGNvbnN0IG1lc3NhZ2UgPSBlcnJvciBpbnN0YW5jZW9mIEVycm9yID8gZXJyb3IubWVzc2FnZSA6ICd1bmtub3duJztcclxuICAgIHRoaXMubG9nZ2VyLmVycm9yKGBGYWlsZWQgdG8gcHVibGlzaCBkb21haW4gZXZlbnQ6IGV2ZW50SWQ9JHtldmVudElkfSBlcnJvcj0ke21lc3NhZ2V9YCk7XHJcbiAgfVxyXG59XHJcbiJdLCJ2ZXJzaW9uIjozfQ==

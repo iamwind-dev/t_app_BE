@@ -332,6 +332,16 @@ model Upload {
   publicId       String    @unique @db.VarChar(512)
   type           String    @db.VarChar(30)
   status         String    @default("pending") @db.VarChar(20)
+  aiModerationStatus ModerationStatus @default(PENDING)
+  aiModerationLabel String?   @db.VarChar(50)
+  aiModerationConfidence Float?
+  aiModerationRaw   Json?
+  mediaSafetyPolicy String    @default("NORMAL") @db.VarChar(40)
+  mediaSafetyReason String?   @db.VarChar(255)
+  mediaBlurSuggested Boolean  @default(false)
+  mediaRequiresClickToReveal Boolean @default(false)
+  mediaVisibleByDefault Boolean @default(true)
+  mediaBlockedFromPosting Boolean @default(false)
   attachedToType String?   @db.VarChar(30)
   attachedToId   String?   @db.Uuid
   attachedAt     DateTime?

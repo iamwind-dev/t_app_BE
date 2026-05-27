@@ -197,6 +197,11 @@ export class RepliesService {
     const finalMediaUrls =
       data.mediaUrls !== undefined ? data.mediaUrls : existingReply.mediaUrls;
     this.assertReplyHasContentOrMedia(finalContent, finalMediaUrls);
+    await this.uploadsService.assertMediaAllowedForPublishing({
+      ownerId: currentUserId,
+      secureUrls: finalMediaUrls,
+      expectedType: 'reply',
+    });
 
     const result = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;
@@ -310,6 +315,11 @@ export class RepliesService {
     const content = this.normalizeContent(input.dto.content);
     const mediaUrls = input.dto.mediaUrls ?? [];
     this.assertReplyHasContentOrMedia(content, mediaUrls);
+    await this.uploadsService.assertMediaAllowedForPublishing({
+      ownerId: input.currentUserId,
+      secureUrls: mediaUrls,
+      expectedType: 'reply',
+    });
     const moderation = await this.moderationService.moderateText(content ?? '');
     const aiReviewedAt = new Date();
 

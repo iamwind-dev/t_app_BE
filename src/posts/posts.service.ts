@@ -86,6 +86,11 @@ export class PostsService {
     const mediaUrls = dto.mediaUrls ?? [];
 
     this.assertPostHasContentOrMedia(content, mediaUrls);
+    await this.uploadsService.assertMediaAllowedForPublishing({
+      ownerId: userId,
+      secureUrls: mediaUrls,
+      expectedType: 'post',
+    });
     const moderation = await this.moderationService.moderateText(content ?? '');
     const visibilityLevel = this.moderationService.toVisibilityLevel(moderation.status);
     const aiReviewedAt = new Date();
@@ -220,6 +225,11 @@ export class PostsService {
     const finalContent = data.content !== undefined ? data.content : existingPost.content;
     const finalMediaUrls = data.mediaUrls !== undefined ? data.mediaUrls : existingPost.mediaUrls;
     this.assertPostHasContentOrMedia(finalContent, finalMediaUrls);
+    await this.uploadsService.assertMediaAllowedForPublishing({
+      ownerId: userId,
+      secureUrls: finalMediaUrls,
+      expectedType: 'post',
+    });
 
     const result = await this.prisma.$transaction(async (tx) => {
       const client = tx as unknown as TransactionClient;

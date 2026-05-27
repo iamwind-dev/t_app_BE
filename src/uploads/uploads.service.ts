@@ -18,6 +18,8 @@ import {
   UploadVideoResponse,
 } from './types/upload-response.type';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModerationService } from '../modules/moderation/moderation.service';
+import { MediaKind } from '../modules/moderation/interfaces/media-moderation.interface';
 
 const allowedMimeTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const allowedUploadTypes = new Set<UploadImageType>(['post', 'reply', 'profile_avatar']);
@@ -49,6 +51,15 @@ interface MarkOldPendingUploadsOrphanedInput {
   ownerId?: string;
 }
 
+interface UploadSafetyRecord {
+  id: string;
+  secureUrl: string;
+  mimeType: string;
+  aiModerationStatus: string;
+  mediaBlockedFromPosting: boolean;
+  mediaSafetyPolicy: string;
+}
+
 @Injectable()
 export class UploadsService {
   private readonly logger = new Logger(UploadsService.name);
@@ -56,6 +67,7 @@ export class UploadsService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly moderationService: ModerationService,
     @Inject(IMAGE_STORAGE_PROVIDER)
     private readonly storageProvider: ImageStorageProvider,
   ) {}
@@ -94,12 +106,16 @@ export class UploadsService {
           secureUrl: true,
           publicId: true,
           type: true,
+          mimeType: true,
         },
       });
+
+      const moderation = await this.moderateAndPersistUpload(upload.id, upload.secureUrl, upload.mimeType);
 
       return {
         url: upload.secureUrl,
         publicId: upload.publicId,
+        moderation,
       };
     } catch (error) {
       this.logger.error('Image upload failed', this.toErrorLogContext(error, userId, type));
@@ -141,15 +157,20 @@ export class UploadsService {
           originalName: this.normalizeOriginalName(file.originalname),
         },
         select: {
+          id: true,
           secureUrl: true,
           publicId: true,
+          mimeType: true,
         },
       });
+
+      const moderation = await this.moderateAndPersistUpload(upload.id, upload.secureUrl, upload.mimeType);
 
       return {
         url: upload.secureUrl,
         publicId: upload.publicId,
         durationSeconds: storedVideo.durationSeconds,
+        moderation,
       };
     } catch (error) {
       this.logger.error('Video upload failed', this.toErrorLogContext(error, userId, 'post'));
@@ -243,6 +264,71 @@ export class UploadsService {
         orphanedAt: new Date(),
       },
     });
+  }
+
+  async assertMediaAllowedForPublishing(input: {
+    ownerId: string;
+    secureUrls: string[];
+    expectedType: UploadImageType;
+  }): Promise<void> {
+    const secureUrls = this.uniqueSecureUrls(input.secureUrls);
+    if (secureUrls.length === 0) {
+      return;
+    }
+
+    const uploads = (await this.prisma.upload.findMany({
+      where: {
+        ownerId: input.ownerId,
+        type: input.expectedType,
+        secureUrl: {
+          in: secureUrls,
+        },
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        secureUrl: true,
+        mimeType: true,
+        aiModerationStatus: true,
+        mediaBlockedFromPosting: true,
+        mediaSafetyPolicy: true,
+      },
+    })) as UploadSafetyRecord[];
+
+    const foundUrls = new Set(uploads.map((item) => item.secureUrl));
+    const missingUrl = secureUrls.find((url) => !foundUrls.has(url));
+    if (missingUrl) {
+      throw new BadRequestException({
+        code: 'UPLOAD_NOT_FOUND',
+        message: 'One or more media URLs are invalid or not owned by this user.',
+      });
+    }
+
+    for (const upload of uploads) {
+      if (upload.aiModerationStatus === 'PENDING') {
+        await this.moderateAndPersistUpload(upload.id, upload.secureUrl, upload.mimeType);
+      }
+    }
+
+    const refreshed = (await this.prisma.upload.findMany({
+      where: {
+        id: {
+          in: uploads.map((item) => item.id),
+        },
+      },
+      select: {
+        mediaBlockedFromPosting: true,
+        mediaSafetyReason: true,
+      },
+    })) as Array<{ mediaBlockedFromPosting: boolean; mediaSafetyReason: string | null }>;
+
+    const blocked = refreshed.find((item) => item.mediaBlockedFromPosting);
+    if (blocked) {
+      throw new BadRequestException({
+        code: 'MEDIA_BLOCKED',
+        message: blocked.mediaSafetyReason ?? 'Media is blocked by safety policy.',
+      });
+    }
   }
 
   private validateUploadType(type: string): UploadImageType {
@@ -389,5 +475,72 @@ export class UploadsService {
     );
 
     return new Date(Date.now() - pendingUploadTtlHours * 60 * 60 * 1000);
+  }
+
+  private async moderateAndPersistUpload(
+    uploadId: string,
+    secureUrl: string,
+    mimeType: string,
+  ): Promise<{
+    original_label: string;
+    mapped_category: string;
+    confidence: number;
+    media_type: 'image' | 'video';
+    action: 'allow' | 'blur_allow_open' | 'blur_no_open' | 'block';
+    can_open: boolean;
+    should_blur: boolean;
+    reason: string | null;
+  }> {
+    const mediaKind: MediaKind = mimeType.startsWith('video/') ? 'video' : 'image';
+    const moderationResult = await this.moderationService.moderateMedia({
+      url: secureUrl,
+      mediaKind,
+      mimeType,
+    });
+    const decision = moderationResult.decision;
+    const aiLabel = decision.original_label === 'unknown' ? null : decision.original_label;
+    const policy = this.toPolicyFromAction(decision.action);
+    const blockedFromPosting = decision.action === 'block';
+    const canOpen = decision.can_open;
+
+    await this.prisma.upload.update({
+      where: { id: uploadId },
+      data: {
+        aiModerationStatus: decision.original_label === 'unknown' ? 'AI_UNAVAILABLE' : 'APPROVED',
+        aiModerationLabel: aiLabel,
+        aiModerationConfidence: decision.confidence,
+        aiModerationRaw: moderationResult.raw ?? moderationResult,
+        mediaSafetyPolicy: policy,
+        mediaSafetyReason: decision.reason,
+        mediaBlurSuggested: decision.should_blur,
+        mediaRequiresClickToReveal: decision.should_blur && canOpen,
+        mediaVisibleByDefault: !decision.should_blur,
+        mediaBlockedFromPosting: blockedFromPosting,
+      },
+    });
+
+    return {
+      original_label: decision.original_label,
+      mapped_category: decision.mapped_category,
+      confidence: decision.confidence,
+      media_type: decision.media_type,
+      action: decision.action,
+      can_open: decision.can_open,
+      should_blur: decision.should_blur,
+      reason: decision.reason,
+    };
+  }
+
+  private toPolicyFromAction(action: 'allow' | 'blur_allow_open' | 'blur_no_open' | 'block'): string {
+    switch (action) {
+      case 'blur_allow_open':
+        return 'BLUR_ALLOW_OPEN';
+      case 'blur_no_open':
+        return 'BLUR_NO_OPEN';
+      case 'block':
+        return 'BLOCK';
+      default:
+        return 'NORMAL';
+    }
   }
 }

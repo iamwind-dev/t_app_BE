@@ -1,0 +1,39 @@
+1e98d94c6c7a8f0c7ad48f7cff5ed02e
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var _a;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ModerationProvider = void 0;
+const axios_1 = require("@nestjs/axios");
+const common_1 = require("@nestjs/common");
+const rxjs_1 = require("rxjs");
+let ModerationProvider = class ModerationProvider {
+    httpService;
+    constructor(httpService) {
+        this.httpService = httpService;
+    }
+    async moderateText(payload) {
+        const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('/moderate', {
+            text: payload.text,
+        }));
+        return response.data;
+    }
+    async moderateMedia(payload) {
+        const response = await (0, rxjs_1.firstValueFrom)(this.httpService.post('/moderate/media', payload));
+        return response.data;
+    }
+};
+exports.ModerationProvider = ModerationProvider;
+exports.ModerationProvider = ModerationProvider = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [typeof (_a = typeof axios_1.HttpService !== "undefined" && axios_1.HttpService) === "function" ? _a : Object])
+], ModerationProvider);
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJmaWxlIjoiRTpcXFByb2plY3RfRmx1dHRlclxcdF9hcHBfQkVcXHNyY1xcbW9kdWxlc1xcbW9kZXJhdGlvblxcbW9kZXJhdGlvbi5wcm92aWRlci50cyIsIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7Ozs7O0FBQUEseUNBQTRDO0FBQzVDLDJDQUE0QztBQUM1QywrQkFBc0M7QUFLL0IsSUFBTSxrQkFBa0IsR0FBeEIsTUFBTSxrQkFBa0I7SUFDQTtJQUE3QixZQUE2QixXQUF3QjtRQUF4QixnQkFBVyxHQUFYLFdBQVcsQ0FBYTtJQUFHLENBQUM7SUFFekQsS0FBSyxDQUFDLFlBQVksQ0FBQyxPQUE0QjtRQUM3QyxNQUFNLFFBQVEsR0FBRyxNQUFNLElBQUEscUJBQWMsRUFDbkMsSUFBSSxDQUFDLFdBQVcsQ0FBQyxJQUFJLENBQW1CLFdBQVcsRUFBRTtZQUNuRCxJQUFJLEVBQUUsT0FBTyxDQUFDLElBQUk7U0FDbkIsQ0FBQyxDQUNILENBQUM7UUFFRixPQUFPLFFBQVEsQ0FBQyxJQUFJLENBQUM7SUFDdkIsQ0FBQztJQUVELEtBQUssQ0FBQyxhQUFhLENBQUMsT0FBNkI7UUFDL0MsTUFBTSxRQUFRLEdBQUcsTUFBTSxJQUFBLHFCQUFjLEVBQ25DLElBQUksQ0FBQyxXQUFXLENBQUMsSUFBSSxDQUF3QixpQkFBaUIsRUFBRSxPQUFPLENBQUMsQ0FDekUsQ0FBQztRQUVGLE9BQU8sUUFBUSxDQUFDLElBQUksQ0FBQztJQUN2QixDQUFDO0NBQ0YsQ0FBQTtBQXBCWSxnREFBa0I7NkJBQWxCLGtCQUFrQjtJQUQ5QixJQUFBLG1CQUFVLEdBQUU7eURBRStCLG1CQUFXLG9CQUFYLG1CQUFXO0dBRDFDLGtCQUFrQixDQW9COUIiLCJuYW1lcyI6W10sInNvdXJjZXMiOlsiRTpcXFByb2plY3RfRmx1dHRlclxcdF9hcHBfQkVcXHNyY1xcbW9kdWxlc1xcbW9kZXJhdGlvblxcbW9kZXJhdGlvbi5wcm92aWRlci50cyJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBIdHRwU2VydmljZSB9IGZyb20gJ0BuZXN0anMvYXhpb3MnO1xuaW1wb3J0IHsgSW5qZWN0YWJsZSB9IGZyb20gJ0BuZXN0anMvY29tbW9uJztcbmltcG9ydCB7IGZpcnN0VmFsdWVGcm9tIH0gZnJvbSAncnhqcyc7XG5pbXBvcnQgeyBNb2RlcmF0ZVRleHRSZXF1ZXN0LCBNb2RlcmF0aW9uUmVzdWx0IH0gZnJvbSAnLi9pbnRlcmZhY2VzL21vZGVyYXRpb24tcmVzdWx0LmludGVyZmFjZSc7XG5pbXBvcnQgeyBNb2RlcmF0ZU1lZGlhUmVxdWVzdCwgTWVkaWFNb2RlcmF0aW9uUmVzdWx0IH0gZnJvbSAnLi9pbnRlcmZhY2VzL21lZGlhLW1vZGVyYXRpb24uaW50ZXJmYWNlJztcblxyXG5ASW5qZWN0YWJsZSgpXHJcbmV4cG9ydCBjbGFzcyBNb2RlcmF0aW9uUHJvdmlkZXIge1xyXG4gIGNvbnN0cnVjdG9yKHByaXZhdGUgcmVhZG9ubHkgaHR0cFNlcnZpY2U6IEh0dHBTZXJ2aWNlKSB7fVxyXG5cclxuICBhc3luYyBtb2RlcmF0ZVRleHQocGF5bG9hZDogTW9kZXJhdGVUZXh0UmVxdWVzdCk6IFByb21pc2U8TW9kZXJhdGlvblJlc3VsdD4ge1xuICAgIGNvbnN0IHJlc3BvbnNlID0gYXdhaXQgZmlyc3RWYWx1ZUZyb20oXHJcbiAgICAgIHRoaXMuaHR0cFNlcnZpY2UucG9zdDxNb2RlcmF0aW9uUmVzdWx0PignL21vZGVyYXRlJywge1xyXG4gICAgICAgIHRleHQ6IHBheWxvYWQudGV4dCxcclxuICAgICAgfSksXHJcbiAgICApO1xyXG5cclxuICAgIHJldHVybiByZXNwb25zZS5kYXRhO1xuICB9XG5cbiAgYXN5bmMgbW9kZXJhdGVNZWRpYShwYXlsb2FkOiBNb2RlcmF0ZU1lZGlhUmVxdWVzdCk6IFByb21pc2U8TWVkaWFNb2RlcmF0aW9uUmVzdWx0PiB7XG4gICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBmaXJzdFZhbHVlRnJvbShcbiAgICAgIHRoaXMuaHR0cFNlcnZpY2UucG9zdDxNZWRpYU1vZGVyYXRpb25SZXN1bHQ+KCcvbW9kZXJhdGUvbWVkaWEnLCBwYXlsb2FkKSxcbiAgICApO1xuXG4gICAgcmV0dXJuIHJlc3BvbnNlLmRhdGE7XG4gIH1cbn1cbiJdLCJ2ZXJzaW9uIjozfQ==

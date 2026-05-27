@@ -36,6 +36,7 @@ describe('RepliesService', () => {
     createReplyNotification: jest.Mock;
   };
   let uploadsService: {
+    assertMediaAllowedForPublishing: jest.Mock;
     syncAttachedUploads: jest.Mock;
     markResourceUploadsOrphaned: jest.Mock;
   };
@@ -106,6 +107,7 @@ describe('RepliesService', () => {
       createReplyNotification: jest.fn(),
     };
     uploadsService = {
+      assertMediaAllowedForPublishing: jest.fn().mockResolvedValue(undefined),
       syncAttachedUploads: jest.fn(),
       markResourceUploadsOrphaned: jest.fn(),
     };

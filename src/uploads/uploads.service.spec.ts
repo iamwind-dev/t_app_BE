@@ -3,6 +3,7 @@ import { UploadsService } from './uploads.service';
 import { IMAGE_STORAGE_PROVIDER } from './providers/image-storage.provider';
 import type { ImageStorageProvider } from './providers/image-storage.provider';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModerationService } from '../modules/moderation/moderation.service';
 
 describe('UploadsService', () => {
   let service: UploadsService;
@@ -14,7 +15,13 @@ describe('UploadsService', () => {
     upload: {
       create: jest.Mock;
       updateMany: jest.Mock;
+      update: jest.Mock;
+      findMany: jest.Mock;
     };
+  };
+  let moderationService: {
+    moderateMedia: jest.Mock;
+    toMediaSafetyDecision: jest.Mock;
   };
 
   const userId = '7b8c5a41-7d25-4e76-b2b5-1f3f1b2a78a1';
@@ -40,7 +47,29 @@ describe('UploadsService', () => {
       upload: {
         create: jest.fn(),
         updateMany: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
       },
+    };
+    moderationService = {
+      moderateMedia: jest.fn().mockImplementation((input: { mediaKind: 'image' | 'video' }) =>
+        Promise.resolve({
+          mediaKind: input.mediaKind,
+          decision: {
+            original_label: 'neutral',
+            mapped_category: 'safe',
+            confidence: 0.98,
+            media_type: input.mediaKind,
+            action: 'allow',
+            can_open: true,
+            should_blur: false,
+            reason: 'Allowed image category.',
+          },
+          model: 'test-model',
+          raw: {},
+        }),
+      ),
+      toMediaSafetyDecision: jest.fn(),
     };
 
     service = new UploadsService(
@@ -54,6 +83,7 @@ describe('UploadsService', () => {
         }),
       } as never,
       prisma as unknown as PrismaService,
+      moderationService as unknown as ModerationService,
       storageProvider,
     );
   });
@@ -68,9 +98,12 @@ describe('UploadsService', () => {
       secureUrl: 'https://cdn.example.com/uploads/posts/public-id.jpg',
       publicId: 'uploads/posts/public-id',
       type: 'post',
+      mimeType: 'image/jpeg',
     });
 
-    const result = await service.uploadImage(userId, imageFile, { type: ' post ' });
+    const result = await service.uploadImage(userId, imageFile, {
+      type: ' post ' as unknown as 'post',
+    });
 
     expect(storageProvider.uploadImage).toHaveBeenCalledWith({
       userId,
@@ -92,11 +125,22 @@ describe('UploadsService', () => {
         secureUrl: true,
         publicId: true,
         type: true,
+        mimeType: true,
       },
     });
     expect(result).toEqual({
       url: 'https://cdn.example.com/uploads/posts/public-id.jpg',
       publicId: 'uploads/posts/public-id',
+      moderation: {
+        original_label: 'neutral',
+        mapped_category: 'safe',
+        confidence: 0.98,
+        media_type: 'image',
+        action: 'allow',
+        can_open: true,
+        should_blur: false,
+        reason: 'Allowed image category.',
+      },
     });
   });
 
@@ -122,9 +166,9 @@ describe('UploadsService', () => {
   });
 
   it('rejects unsupported upload types', async () => {
-    await expect(service.uploadImage(userId, imageFile, { type: 'cover' })).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.uploadImage(userId, imageFile, { type: 'cover' as unknown as 'post' }),
+    ).rejects.toThrow(BadRequestException);
   });
 
   it('maps provider failures and invalid provider responses to a stable error', async () => {
@@ -155,8 +199,10 @@ describe('UploadsService', () => {
       durationSeconds: 59.4,
     });
     prisma.upload.create.mockResolvedValue({
+      id: 'upload-id',
       secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
       publicId: 'uploads/posts/video',
+      mimeType: 'video/mp4',
     });
 
     const videoFile = {
@@ -178,6 +224,16 @@ describe('UploadsService', () => {
       url: 'https://cdn.example.com/uploads/posts/video.mp4',
       publicId: 'uploads/posts/video',
       durationSeconds: 59.4,
+      moderation: {
+        original_label: 'neutral',
+        mapped_category: 'safe',
+        confidence: 0.98,
+        media_type: 'video',
+        action: 'allow',
+        can_open: true,
+        should_blur: false,
+        reason: 'Allowed image category.',
+      },
     });
   });
 
@@ -188,8 +244,10 @@ describe('UploadsService', () => {
       durationSeconds: 42,
     });
     prisma.upload.create.mockResolvedValue({
+      id: 'upload-id',
       secureUrl: 'https://cdn.example.com/uploads/posts/video.mp4',
       publicId: 'uploads/posts/video',
+      mimeType: 'video/mp4',
     });
 
     const longOriginalName = `${'a'.repeat(300)}.mp4`;
@@ -208,8 +266,10 @@ describe('UploadsService', () => {
         originalName: longOriginalName.slice(0, 255),
       }),
       select: {
+        id: true,
         secureUrl: true,
         publicId: true,
+        mimeType: true,
       },
     });
   });
